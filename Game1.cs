@@ -23,9 +23,9 @@ public class Game1 : Game
     private float _flashTime;             // seconds remaining of red flash
     private float _time;                  // total elapsed time (for pulsing)
     private bool _meltdown;               // past the final warning threshold
-    private readonly List<string> _history = new();
+    private readonly List<string> _history = [];
 
-    private Keys[] _otherPressedLastFrame = Array.Empty<Keys>();
+    private Keys[] _otherPressedLastFrame = [];
     private Rectangle _screen;
     private bool _spaceWasDown;
 
@@ -50,7 +50,7 @@ public class Game1 : Game
         _spriteBatch = new SpriteBatch(GraphicsDevice);
         _font = Content.Load<SpriteFont>("AngryFont");
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
-        _pixel.SetData(new[] { Color.White });
+        _pixel.SetData([Color.White]);
         _screen = new Rectangle(0, 0, GraphicsDevice.PresentationParameters.BackBufferWidth,
                                      GraphicsDevice.PresentationParameters.BackBufferHeight);
     }
@@ -187,7 +187,7 @@ public class Game1 : Game
         float pulse = 1f + rage * 0.35f * (float)Math.Abs(Math.Sin(_time * 5));
         _spriteBatch.DrawString(_font, countText,
             new Vector2(_screen.Center.X - ctSize.X / 2, 90) + shake,
-            Color.Lerp(Color.Goldenrod, Color.Red, rage), Vector2.One * (2.2f * pulse),
+            Color.Lerp(Color.Goldenrod, Color.Red, rage), 2.2f * pulse,
             ctSize / 2, 0f, SpriteEffects.None, 0f);
         var small = "times you ignored the instructions";
         var sSize = _font.MeasureString(small);
@@ -203,7 +203,7 @@ public class Game1 : Game
             (int)signSize.X + 60, (int)signSize.Y + 40),
             Color.Lerp(Color.White, Color.Crimson, rage));
         _spriteBatch.DrawString(_font, sign, signPos + new Vector2(10, 10),
-            Color.Lerp(Color.DarkRed, Color.Black, rage), Vector2.One * 1.6f,
+            Color.Lerp(Color.DarkRed, Color.Black, rage), 1.6f,
             Vector2.Zero, 0f, SpriteEffects.None, 0f);
 
         // Current shout + recent history, jittering with rage.
@@ -243,7 +243,7 @@ public class Game1 : Game
             if (_font.MeasureString(test).X * scale > maxWidth)
             {
                 _spriteBatch.DrawString(_font, line, new Vector2(pos.X, yy), color,
-                    Vector2.One * scale, Vector2.Zero, 0f, SpriteEffects.None, 0f);
+                    scale, Vector2.Zero, 0f, SpriteEffects.None, 0f);
                 yy += 30 * scale;
                 line = w;
             }
@@ -251,6 +251,6 @@ public class Game1 : Game
         }
         if (line.Length > 0)
             _spriteBatch.DrawString(_font, line, new Vector2(pos.X, yy), color,
-                Vector2.One * scale, Vector2.Zero, 0f, SpriteEffects.None, 0f);
+                scale, Vector2.Zero, 0f, SpriteEffects.None, 0f);
     }
 }

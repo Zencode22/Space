@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 
 namespace SpriteFontTool
@@ -29,10 +30,9 @@ namespace SpriteFontTool
             var root = doc.RootElement.GetProperty("glyphs");
             int n = root.GetArrayLength();
 
-            string glyphStr = "";
             var list = new List<(string c, int x, int y, int w, int h, float xa, float xo, float yo)>();
             foreach (var g in root.EnumerateArray())
-                list.Add((g.GetProperty("c").GetString(), g.GetProperty("x").GetInt32(),
+                list.Add((g.GetProperty("c").GetString() ?? "", g.GetProperty("x").GetInt32(),
                           g.GetProperty("y").GetInt32(), g.GetProperty("w").GetInt32(),
                           g.GetProperty("h").GetInt32(), g.GetProperty("xa").GetSingle(),
                           g.GetProperty("xo").GetSingle(), g.GetProperty("yo").GetSingle()));
@@ -58,7 +58,8 @@ namespace SpriteFontTool
             }
 
             // Copy the pre-baked texture xnb produced by the python stage.
-            string srcTex = Path.Combine(Path.GetDirectoryName(args[1]), "AngryFont_0.xnb");
+            string texDir = Path.GetDirectoryName(args[1]) ?? ".";
+            string srcTex = Path.Combine(texDir, "AngryFont_0.xnb");
             if (File.Exists(srcTex))
                 File.Copy(srcTex, Path.Combine(args[2], "AngryFont_0.xnb"), true);
 

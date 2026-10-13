@@ -89,9 +89,13 @@ public class Game1 : Game
     private static Keys[] CollectOtherDownKeys(Microsoft.Xna.Framework.Input.KeyboardState kb)
     {
         // Everything except Space (and Esc, which is the emergency exit).
+        // ToArray() is required here: LINQ returns IEnumerable<Keys>, which cannot
+        // use a collection expression, and this method's contract is a materialized Keys[].
+#pragma warning disable IDE0305 // Collection initialization can be simplified
         return kb.GetPressedKeys()
                  .Where(k => k != Keys.Space && k != Keys.Escape && k != Keys.None)
                  .ToArray();
+#pragma warning restore IDE0305
     }
 
     private void OnSpacePressed()

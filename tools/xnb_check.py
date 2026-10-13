@@ -40,32 +40,27 @@ def read_str(d, o):
     return s, o + ln
 
 
+def check_header(d):
+    """Validate the XNB v5 container header exactly like MonoGame does.
+
+    Layout: 'X','N','B' | version(1) | flags(1) | fileSize(4 LE) | stream...
+    Returns the offset where the serialized object stream begins (9).
+    """
+    assert d[:3] == b"XNB", f"bad magic: {d[:3]!r}"
+    assert d[3] == 5, f"format version must be 5, got {d[3]}"
+    assert d[4] == 0, f"flags must be 0 (uncompressed/cross-platform), got {d[4]}"
+    size_field = struct.unpack("<I", d[5:9])[0]
+    assert size_field == len(d), f"header size {size_field} != file size {len(d)}"
+    return 9
+
+
 def check_font(path):
     d = open(path, "rb").read()
-    assert d[:4] == b"XNB\x05", "bad magic"
-    assert d[4] == 5, f"version byte must be 5, got {d[4]}"   # <-- key check
-    assert d[5] == 0, "no compression allowed (cross-platform)"
-    size_field = struct.unpack("<I", d[6:10])[0]
-    assert size_field == len(d), f"header size {size_field} != file size {len(d)}"
-    o = 10
+    o = check_header(d)
     type_name, o = read_str(d, o)
     assert type_name == "Microsoft.Xna.Framework.Content.SpriteFontReader"
     kl, o = read7(d, o)
     o += kl  # lzx key
-    nr, o = read7(d, o)
-    readers = {}
-    for _ in range(nr):
-        idx, o = read7(d, o)
-        nm, o = read_str(d, o)
-        readers[idx] = nm
-    nsr, o = read7(d, o)
-    shared_types = []
-    shared_offsets = []
-    for _ in range(nsr):
-        t, o = read7(d, o)
-        shared_types.append(t)
-        shared_offsets.append(o)
-    mt, o = read7(d, o)
     cnt, o = read7(d, o)
     glyphs_end = o + cnt * 44
     x, y, w, h = struct.unpack_from("<iiii", d, o)

@@ -31,18 +31,34 @@ def enc7(n: int) -> bytes:
 def xnb(reader_type: str, body: bytes) -> bytes:
     """Wrap an asset body in a valid XNB v5 container.
 
-    Header layout (must match MonoGame's ContentManager exactly):
-      magic 'XNB' | version byte 5 | flags 0 (uncompressed) | file size uint32
-    The version byte is the *fifth* byte of the file; writing it as part of
-    the magic (b"XNB\\x05" followed by 0x00) makes the loader reject the asset
-    with "Asset does not appear to be a valid XNB file."
+    Byte-for-byte layout expected by MonoGame's ContentManager
+    (see ContentManager.GetContentReaderFromXnb / ReadAsset<T>):
+
+      offset 0..2 : magic 'X','N','B'
+      offset 3    : format version byte (5)
+      offset 4    : flags (0 = uncompressed; non-zero means LZX/Xbox packing,
+                    which is what triggers "Did you process your content for
+                    Windows?" on DesktopGL)
+      offset 5..8 : total file size including this header, uint32 LE
+      offset 9..  : the serialized object stream, whose *first* element is
+                    always the main reader-type-name string (7-bit length
+                    prefix), followed by the LzxKey string ("", i.e. 0x00).
+
+    Historical bugs in this function that produced the exact runtime error
+    "Asset does not appear to be a valid XNB file. Did you process your
+    content for Windows?":
+      1. b"XNB\\x05\\x00..." wrote version 0 into the version slot.
+      2. Writing the size field as four zero bytes (or otherwise mismatching
+         it against the real file length) makes the loader reject the file.
+      3. Emitting spurious extra count bytes between the LzxKey and the
+         object body desynchronizes every subsequent read.
     """
     rt = reader_type.encode("utf-8")
     payload = bytearray()
-    payload += enc7(len(rt)) + rt   # reader type name string
+    payload += enc7(len(rt)) + rt   # main reader type name string
     payload += enc7(0)              # LzxKey: empty string => uncompressed
     payload += body
-    total = 10 + len(payload)       # magic(4)+ver(1)+flags(1)+size(4)
+    total = 9 + len(payload)        # 'XNB'+ver(4) + flags(1) + size(4)
     o = bytearray(b"XNB")
     o.append(5)                     # format version
     o.append(0)                     # no compression flags

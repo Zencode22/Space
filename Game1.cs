@@ -167,7 +167,7 @@ public class Game1 : Game
         float rage = Math.Clamp(_pressCount / (float)MeltdownAt, 0f, 1f);
         var bg = Color.Lerp(new Color(28, 30, 38), new Color(120, 10, 10), rage);
         if (_meltdown)
-            bg = Color.Lerp(bg, Color.Black, 0.5f + 0.5f * Math.Abs(Math.Sin(_time * 6)));
+            bg = Color.Lerp(bg, Color.Black, (float)(0.5 + 0.5 * Math.Abs(Math.Sin(_time * 6))));
 
         GraphicsDevice.Clear(bg);
 
@@ -184,11 +184,11 @@ public class Game1 : Game
         // Big countdown of disobedience.
         var countText = _pressCount.ToString();
         var ctSize = _font.MeasureString(countText);
-        float pulse = 1f + rage * 0.35f * Math.Abs(Math.Sin(_time * 5));
+        float pulse = 1f + rage * 0.35f * (float)Math.Abs(Math.Sin(_time * 5));
         _spriteBatch.DrawString(_font, countText,
             new Vector2(_screen.Center.X - ctSize.X / 2, 90) + shake,
             Color.Lerp(Color.Goldenrod, Color.Red, rage), Vector2.One * (2.2f * pulse),
-            ctSize / 2, 0, 0);
+            ctSize / 2, 0f, SpriteEffects.None, 0f);
         var small = "times you ignored the instructions";
         var sSize = _font.MeasureString(small);
         _spriteBatch.DrawString(_font, small,
@@ -204,7 +204,7 @@ public class Game1 : Game
             Color.Lerp(Color.White, Color.Crimson, rage));
         _spriteBatch.DrawString(_font, sign, signPos + new Vector2(10, 10),
             Color.Lerp(Color.DarkRed, Color.Black, rage), Vector2.One * 1.6f,
-            Vector2.Zero, 0, 0);
+            Vector2.Zero, 0f, SpriteEffects.None, 0f);
 
         // Current shout + recent history, jittering with rage.
         float y = 400;
@@ -243,7 +243,7 @@ public class Game1 : Game
             if (_font.MeasureString(test).X * scale > maxWidth)
             {
                 _spriteBatch.DrawString(_font, line, new Vector2(pos.X, yy), color,
-                    Vector2.One * scale, Vector2.Zero, 0, 0);
+                    Vector2.One * scale, Vector2.Zero, 0f, SpriteEffects.None, 0f);
                 yy += 30 * scale;
                 line = w;
             }
@@ -251,6 +251,6 @@ public class Game1 : Game
         }
         if (line.Length > 0)
             _spriteBatch.DrawString(_font, line, new Vector2(pos.X, yy), color,
-                Vector2.One * scale, Vector2.Zero, 0, 0);
+                Vector2.One * scale, Vector2.Zero, 0f, SpriteEffects.None, 0f);
     }
 }

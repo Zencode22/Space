@@ -29,11 +29,25 @@ def enc7(n: int) -> bytes:
 
 
 def xnb(reader_type: str, body: bytes) -> bytes:
-    o = bytearray(b"XNB\x05\x00\x00\x00\x00")
+    """Wrap an asset body in a valid XNB v5 container.
+
+    Header layout (must match MonoGame's ContentManager exactly):
+      magic 'XNB' | version byte 5 | flags 0 (uncompressed) | file size uint32
+    The version byte is the *fifth* byte of the file; writing it as part of
+    the magic (b"XNB\\x05" followed by 0x00) makes the loader reject the asset
+    with "Asset does not appear to be a valid XNB file."
+    """
     rt = reader_type.encode("utf-8")
-    o += enc7(len(rt)) + rt   # reader type name string
-    o += enc7(0)              # LzxKey: empty string => uncompressed
-    o += body
+    payload = bytearray()
+    payload += enc7(len(rt)) + rt   # reader type name string
+    payload += enc7(0)              # LzxKey: empty string => uncompressed
+    payload += body
+    total = 10 + len(payload)       # magic(4)+ver(1)+flags(1)+size(4)
+    o = bytearray(b"XNB")
+    o.append(5)                     # format version
+    o.append(0)                     # no compression flags
+    o += struct.pack("<I", total)   # full file size
+    o += payload
     return bytes(o)
 
 

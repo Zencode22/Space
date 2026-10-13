@@ -67,15 +67,31 @@ namespace SpriteFontTool
             return 0;
         }
 
+        // XNB strings are length-prefixed with a 7-bit encoded unsigned int:
+        // the low 7 bits of each byte hold data, the high bit is the
+        // continuation flag. NOT a shift-based encoding.
+        private static void WriteEncodedInt(BinaryWriter w, uint n)
+        {
+            while (n >= 0x80)
+            {
+                w.Write((byte)(n | 0x80));
+                n >>= 7;
+            }
+            w.Write((byte)n);
+        }
+
         private static void WriteString(BinaryWriter w, string s)
         {
-            w.Write((7u << 24) | (uint)s.Length);
-            w.Write(Encoding.UTF8.GetBytes(s));
+            var bytes = Encoding.UTF8.GetBytes(s);
+            WriteEncodedInt(w, (uint)bytes.Length);
+            w.Write(bytes);
         }
 
         private static void WriteExternal(BinaryWriter w, int index)
         {
-            w.Write((7u << 24) | (uint)index);
+            // ExternalReference<T> is serialized as a plain 7-bit encoded
+            // shared-reader index (no type header in this format version).
+            WriteEncodedInt(w, (uint)index);
         }
     }
 }

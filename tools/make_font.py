@@ -93,7 +93,7 @@ def main():
         body += struct.pack("<iiii", 0, 0, 0, 0)                      # Keringing (zeros)
     body += struct.pack("<f", line_spacing)
     body += struct.pack("<ii", tex_w, tex_h)
-    body += enc7((7 << 24) | 0)   # ExternalReference<Texture2D>, index 0
+    body += enc7(0)               # ExternalReference<Texture2D>, shared index 0
 
     with open(os.path.join(outdir, f"{asset}.xnb"), "wb") as f:
         f.write(xnb("Microsoft.Xna.Framework.Content.SpriteFontReader", bytes(body)))

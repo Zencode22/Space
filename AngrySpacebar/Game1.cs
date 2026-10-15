@@ -69,8 +69,8 @@ public class Game1 : Game
     {
         _graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = 1280,
-            PreferredBackBufferHeight = 720,
+            PreferredBackBufferWidth = LogicWidth,
+            PreferredBackBufferHeight = LogicHeight,
             IsFullScreen = false
         };
         Content.RootDirectory = "Content";
@@ -79,6 +79,10 @@ public class Game1 : Game
 
     protected override void Initialize()
     {
+        // Run at a fixed 60fps regardless of vsync/display refresh rate.
+        IsFixedTimeStep = true;
+        TargetElapsedTime = TimeSpan.FromTicks(166667);
+
         base.Initialize();
     }
 
@@ -266,15 +270,29 @@ public class Game1 : Game
         bg = Color.Lerp(bg, new Color(255, 60, 60), pressFlash * 0.35f);
         GraphicsDevice.Clear(bg);
 
+        // Scale the 1280x720 logic area to fit the actual back buffer so the
+        // whole game is always visible, no matter the window/display size.
+        int bufW = GraphicsDevice.PresentationParameters.BackBufferWidth;
+        int bufH = GraphicsDevice.PresentationParameters.BackBufferHeight;
+        float scaleX = bufW / (float)LogicWidth;
+        float scaleY = bufH / (float)LogicHeight;
+        float fitScale = Math.Min(scaleX, scaleY);
+        // center the scaled logic area in the window
+        float offX = (bufW - LogicWidth * fitScale) / 2f;
+        float offY = (bufH - LogicHeight * fitScale) / 2f;
+        Matrix transform = Matrix.CreateTranslation(offX, offY, 0) *
+                           Matrix.CreateScale(fitScale, fitScale, 1) *
+                           Matrix.CreateTranslation(shake.X, shake.Y, 0);
+
         _sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
-                  SamplerState.PointClamp, transformMatrix: Matrix.CreateTranslation(shake.X, shake.Y, 0));
+                  SamplerState.PointClamp, transformMatrix: transform);
 
         // subtle vignette of darkening at high anger
         if (anger > 0.4f)
         {
             float a = (anger - 0.4f) * 0.9f;
-            DrawRect(_sb, new Rectangle(-50, -50, GraphicsDevice.PresentationParameters.BackBufferWidth + 100, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
-            DrawRect(_sb, new Rectangle(-50, GraphicsDevice.PresentationParameters.BackBufferHeight - 10, 1380, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
+            DrawRect(_sb, new Rectangle(-50, -50, LogicWidth + 100, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
+            DrawRect(_sb, new Rectangle(-50, LogicHeight - 10, LogicWidth + 100, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
         }
 
         float cx = LogicWidth / 2f;

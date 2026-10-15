@@ -71,8 +71,7 @@ public class Game1 : Game
         {
             PreferredBackBufferWidth = LogicWidth,
             PreferredBackBufferHeight = LogicHeight,
-            // Windowed fullscreen: covers the whole screen but keeps the
-            // normal window border/title bar (no exclusive-mode takeover).
+            // Plain fixed-size window; there is no fullscreen mode.
             IsFullScreen = false
         };
         Content.RootDirectory = "Content";
@@ -85,62 +84,13 @@ public class Game1 : Game
         IsFixedTimeStep = true;
         TargetElapsedTime = TimeSpan.FromTicks(166667);
 
-        // Windowed fullscreen: size the window's client area to the monitor's
-        // native resolution while keeping the standard window border/title
-        // bar (IsFullScreen stays false, so no exclusive-mode display
-        // takeover). Rendering still happens in the 1280x720 virtual space
-        // and is letterbox-fit/scaled to the back buffer, so everything stays
-        // centered and fully on-screen.
-        var screen = GraphicsAdapter.DefaultAdapter?.CurrentDisplayMode;
-        int wantW = screen?.Width ?? LogicWidth * 2;
-        int wantH = screen?.Height ?? LogicHeight * 2;
-
-        _graphics.PreferredBackBufferWidth = wantW;
-        _graphics.PreferredBackBufferHeight = wantH;
+        // The game runs in a plain windowed mode only — no fullscreen of any
+        // kind. The back buffer matches the 1280x720 virtual logic space, so
+        // rendering is 1:1 and nothing needs scaling to a monitor resolution.
+        _graphics.PreferredBackBufferWidth = LogicWidth;
+        _graphics.PreferredBackBufferHeight = LogicHeight;
         _graphics.IsFullScreen = false;
         _graphics.ApplyChanges();
-
-        // Center the oversized window on the primary screen so the borders
-        // sit flush at the screen edges. MonoGame's GraphicsAdapter exposes
-        // the current display mode of the default adapter (DesktopGL does
-        // not ship a DisplayInfo type — that API is Windows-UI-specific).
-        try
-        {
-            var adapter = GraphicsAdapter.DefaultAdapter;
-            var mode = adapter?.CurrentDisplayMode;
-            if (mode is { } m)
-            {
-                // DisplayMode exposes Width/Height (and Title), but no Bounds.
-                Window.Position = new Point(
-                    Math.Max(0, (m.Width - wantW) / 2),
-                    Math.Max(0, (m.Height - wantH) / 2));
-            }
-        }
-        catch
-        {
-            // No display info available (e.g. headless) – keep default placement.
-        }
-
-        // Keep the back buffer in sync if the window/display ever changes
-        // (e.g. the user switches monitors) so the scaled output keeps
-        // filling the screen exactly.
-        Window.ClientSizeChanged += (_, _) =>
-        {
-            int w = Window.ClientBounds.Width;
-            int h = Window.ClientBounds.Height;
-            if (w <= 0 || h <= 0) return;
-            if (_graphics.PreferredBackBufferWidth != w || _graphics.PreferredBackBufferHeight != h)
-            {
-                _graphics.PreferredBackBufferWidth = w;
-                _graphics.PreferredBackBufferHeight = h;
-                _graphics.IsFullScreen = false;
-                _graphics.ApplyChanges();
-            }
-        };
-
-        // The game always opens in windowed-fullscreen at the monitor's
-        // native resolution, so there is no window size/position to remember
-        // between runs.
 
         base.Initialize();
     }

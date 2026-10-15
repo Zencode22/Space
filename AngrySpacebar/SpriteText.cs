@@ -173,6 +173,9 @@ public class SpriteText
         float ox = total * originXRatio;
         float oy = _lineHeight * scale * originYRatio;
 
+        // guard against a null string so the loop below never dereferences null
+        if (text is null) return;
+
         float x = 0f;
         foreach (char c in text)
         {

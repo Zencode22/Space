@@ -335,9 +335,9 @@ public class Game1 : Game
         if (cur.Length > 0) lines.Add(cur);
 
         // per-line jitter values (rolled once per frame in Draw)
-        Span<float> jxs = stackalloc float[] { _jx1, _jx2, _jx3 };
-        Span<float> jys = stackalloc float[] { _jy1, _jy2, _jy3 };
-        Span<float> jrs = stackalloc float[] { _jr1, _jr2, _jr3 };
+        ReadOnlySpan<float> jxs = stackalloc float[3] { _jx1, _jx2, _jx3 };
+        ReadOnlySpan<float> jys = stackalloc float[3] { _jy1, _jy2, _jy3 };
+        ReadOnlySpan<float> jrs = stackalloc float[3] { _jr1, _jr2, _jr3 };
 
         float lineH = size * 1.4f;
         float y = centerTop.Y - (lines.Count - 1) * lineH / 2f;

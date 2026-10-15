@@ -306,7 +306,7 @@ public class Game1 : Game
 
         // title — centered on the face's X (faceX)
         float titleSize = _text.FitSize("DO NOT PRESS THE SPACEBAR",
-            textMaxWidth, 64 + anger * 20 + pressFlash * 10);
+            textMaxWidth, 40 + anger * 12 + pressFlash * 6);
         Color titleColor = Color.Lerp(Color.White, new Color(255, 80, 80), anger);
         float titleRot = anger * 0.06f * (float)Math.Sin(_gameTime * 8);
         _text.DrawCentered(_sb, "DO NOT PRESS THE SPACEBAR",
@@ -314,16 +314,16 @@ public class Game1 : Game
 
         // instruction line
         float instrSize = _text.FitSize("The only button you can use is [SPACE]. Don't.",
-            textMaxWidth, 30);
+            textMaxWidth, 20);
         _text.DrawCentered(_sb, "The only button you can use is [SPACE]. Don't.",
             new Vector2(faceX, 170), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
 
         // current message (the angry voice), wrapped to fit the screen
-        float msgMaxSize = 44 + anger * 18;
+        float msgMaxSize = 24 + anger * 10;
         var msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgMaxSize);
         float msgSize = msgMaxSize;
         // if wrapping produced many lines, shrink until it fits in 3 lines
-        while (msgLines.Count > 3 && msgSize > 20f)
+        while (msgLines.Count > 3 && msgSize > 14f)
         {
             msgSize -= 4f;
             msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
@@ -334,7 +334,7 @@ public class Game1 : Game
 
         // press counter
         string pressText = $"Spacebar presses: {_pressCount}";
-        float pressSize = _text.FitSize(pressText, textMaxWidth, 34);
+        float pressSize = _text.FitSize(pressText, textMaxWidth, 18);
         _text.DrawCentered(_sb, pressText,
             new Vector2(faceX, LogicHeight - 60), pressSize, Color.Lerp(Color.Gray, Color.Yellow, anger));
 

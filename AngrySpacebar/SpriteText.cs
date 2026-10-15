@@ -80,6 +80,84 @@ public class SpriteText
         return any ? adv + lastVisible : 0f;
     }
 
+    /// <summary>
+    /// The largest pixel size &lt;= <paramref name="maxPixelSize"/> for which the
+    /// string fits within <paramref name="maxWidth"/> pixels. Used to keep text
+    /// from being clipped at the screen edges.
+    /// </summary>
+    public float FitSize(string text, float maxWidth, float maxPixelSize)
+    {
+        if (string.IsNullOrEmpty(text)) return maxPixelSize;
+        float w = Measure(text, maxPixelSize);
+        if (w <= maxWidth || w <= 0f) return maxPixelSize;
+        // scale down proportionally so the measured width equals maxWidth
+        float size = maxPixelSize * maxWidth / w;
+        return MathF.Max(size, 1f);
+    }
+
+    /// <summary>
+    /// Greedy word wrap that also breaks words longer than <paramref name="maxWidth"/>
+    /// so no line can ever exceed the maximum width (prevents clipping).
+    /// </summary>
+    public List<string> Wrap(string text, float maxWidth, float pixelSize)
+    {
+        var lines = new List<string>();
+        if (string.IsNullOrEmpty(text)) return lines;
+
+        float adv = _cellWidth * (pixelSize / BaseSize);
+        var curWords = new List<string>();
+        float curWidth = 0f;
+
+        void Flush()
+        {
+            if (curWords.Count > 0)
+            {
+                lines.Add(string.Join(" ", curWords));
+                curWords.Clear();
+                curWidth = 0f;
+            }
+        }
+
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            float wordW = Measure(word, pixelSize);
+
+            // word alone is too wide: break it into chunks that fit
+            if (wordW > maxWidth)
+            {
+                Flush();
+                var chunk = new System.Text.StringBuilder();
+                float chunkW = 0f;
+                foreach (char ch in word)
+                {
+                    float cw = _glyphs.TryGetValue(ch, out var g)
+                        ? g.Width * (pixelSize / BaseSize)
+                        : adv;
+                    if (chunk.Length > 0 && chunkW + adv + cw > maxWidth)
+                    {
+                        lines.Add(chunk.ToString());
+                        chunk.Clear();
+                        chunkW = 0f;
+                    }
+                    if (chunk.Length > 0) chunkW += adv;
+                    chunk.Append(ch);
+                    chunkW += cw;
+                }
+                if (chunk.Length > 0) lines.Add(chunk.ToString());
+                continue;
+            }
+
+            float addW = curWords.Count == 0 ? wordW : adv + wordW;
+            if (curWords.Count > 0 && curWidth + addW > maxWidth)
+                Flush();
+
+            curWords.Add(word);
+            curWidth = curWords.Count == 1 ? wordW : curWidth + adv + wordW;
+        }
+        Flush();
+        return lines;
+    }
+
     public void Draw(SpriteBatch sb, string text, Vector2 position, float pixelSize,
                     Color color, float rotation = 0f, float originXRatio = 0f,
                     float originYRatio = 0f)

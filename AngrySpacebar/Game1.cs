@@ -71,7 +71,7 @@ public class Game1 : Game
         {
             PreferredBackBufferWidth = LogicWidth,
             PreferredBackBufferHeight = LogicHeight,
-            IsFullScreen = false
+            IsFullScreen = true // launch straight into fullscreen
         };
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
@@ -83,91 +83,41 @@ public class Game1 : Game
         IsFixedTimeStep = true;
         TargetElapsedTime = TimeSpan.FromTicks(166667);
 
-        // Start the window at 2x the logic resolution (2560x1440 client area),
-        // or restore the size from the last run if one was saved. Nothing else
-        // changes: rendering still happens in the 1280x720 virtual space and is
-        // letterbox-fit/scaled to whatever buffer size the window ends up with,
-        // so everything stays centered and fully on-screen — just bigger.
-        // If 2x doesn't fit the monitor, clamp it to 90% of the display mode.
+        // Run fullscreen at the monitor's native resolution. Rendering still
+        // happens in the 1280x720 virtual space and is letterbox-fit/scaled to
+        // the back buffer, so everything stays centered and fully on-screen.
         var screen = GraphicsAdapter.DefaultAdapter?.CurrentDisplayMode;
-        int wantW = LogicWidth * 2;
-        int wantH = LogicHeight * 2;
-        bool restored = TryReadSavedWindow(out int x, out int y, out int sw, out int sh);
-        if (restored && sw >= 320 && sh >= 200)
-        {
-            wantW = sw;
-            wantH = sh;
-        }
-        if (screen != null)
-        {
-            wantW = Math.Min(wantW, (int)(screen.Width * 0.9));
-            wantH = Math.Min(wantH, (int)(screen.Height * 0.9));
-        }
+        int wantW = screen?.Width ?? LogicWidth * 2;
+        int wantH = screen?.Height ?? LogicHeight * 2;
 
         // ClientBounds is read-only; set the size through the graphics device
         // manager instead, which resizes the window's client area to match.
         _graphics.PreferredBackBufferWidth = wantW;
         _graphics.PreferredBackBufferHeight = wantH;
+        _graphics.IsFullScreen = true;
         _graphics.ApplyChanges();
-        if (restored)
-            Window.Position = new Point(x, y);
 
-        // Keep the back buffer in sync with the window so the scaled output
-        // fills it exactly (no blurry upscale / black bars inside the window).
+        // Keep the back buffer in sync if the display mode / window ever
+        // changes (e.g. the user switches monitors) so the scaled output keeps
+        // filling the screen exactly.
         Window.ClientSizeChanged += (_, _) =>
         {
             int w = Window.ClientBounds.Width;
             int h = Window.ClientBounds.Height;
+            if (w <= 0 || h <= 0) return;
             if (_graphics.PreferredBackBufferWidth != w || _graphics.PreferredBackBufferHeight != h)
             {
                 _graphics.PreferredBackBufferWidth = w;
                 _graphics.PreferredBackBufferHeight = h;
+                _graphics.IsFullScreen = true;
                 _graphics.ApplyChanges();
             }
         };
 
-        // Remember the window size/position between runs (MonoGame exposes an
-        // Exiting event rather than a virtual OnExiting method).
-        Exiting += (_, _) => SaveWindowSize();
+        // The game always opens fullscreen at the monitor's native resolution,
+        // so there is no window size/position to remember between runs.
 
         base.Initialize();
-    }
-
-    private void SaveWindowSize()
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(SavedWindowPath)!);
-            File.WriteAllText(SavedWindowPath,
-                $"{Window.ClientBounds.X} {Window.ClientBounds.Y} {Window.ClientBounds.Width} {Window.ClientBounds.Height}");
-        }
-        catch { /* non-critical */ }
-    }
-
-    private static string SavedWindowPath
-    {
-        get
-        {
-            var dir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(dir, "AngrySpacebar", "window.txt");
-        }
-    }
-
-    private static bool TryReadSavedWindow(out int x, out int y, out int w, out int h)
-    {
-        x = y = w = h = 0;
-        try
-        {
-            if (!File.Exists(SavedWindowPath)) return false;
-            string[] p = File.ReadAllText(SavedWindowPath).Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (p.Length == 4 &&
-                int.TryParse(p[0], out x) && int.TryParse(p[1], out y) &&
-                int.TryParse(p[2], out w) && int.TryParse(p[3], out h))
-                return true;
-        }
-        catch { /* ignore */ }
-        x = y = w = h = 0;
-        return false;
     }
 
     protected override void LoadContent()

@@ -107,12 +107,13 @@ public class Game1 : Game
         try
         {
             var adapter = GraphicsAdapter.DefaultAdapter;
-            var bounds = adapter?.CurrentDisplayMode?.Bounds;
-            if (bounds is { } b)
+            var mode = adapter?.CurrentDisplayMode;
+            if (mode is { } m)
             {
+                // DisplayMode exposes Width/Height (and Title), but no Bounds.
                 Window.Position = new Point(
-                    Math.Max(0, (b.Width - wantW) / 2),
-                    Math.Max(0, (b.Height - wantH) / 2));
+                    Math.Max(0, (m.Width - wantW) / 2),
+                    Math.Max(0, (m.Height - wantH) / 2));
             }
         }
         catch

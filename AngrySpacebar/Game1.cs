@@ -29,7 +29,7 @@ public class Game1 : Game
 
     // ---- game state ----
     private static readonly string[] Messages =
-    {
+    [
         "Welcome! Please do NOT press the spacebar.",
         "You pressed the spacebar. We said NOT to.",
         "Seriously. Stop pressing the spacebar.",
@@ -46,7 +46,7 @@ public class Game1 : Game
         "ENOUGH!!! ENOUGH!!! ENOUGH!!! AAAAAAAAA!!!",
         "FINE. PRESS IT. SEE WHAT HAPPENS. ...IT GETS WORSE.",
         "WE ARE SO, SO ANGRY RIGHT NOW. GRRRRRRRR!!!!!!",
-    };
+    ];
 
     private KeyboardState _prevKeys;
     private int _pressCount = 0;
@@ -55,7 +55,7 @@ public class Game1 : Game
     private string _currentMessage = Messages[0];
 
     // jitter that changes once per frame (re-seeded at the top of Draw)
-    private readonly Random _jitterRng = new Random();
+    private readonly Random _jitterRng = new();
     private float _jx1, _jy1, _jr1, _jx2, _jy2, _jr2, _jx3, _jy3, _jr3;
     private void RerollJitter()
     {
@@ -67,10 +67,12 @@ public class Game1 : Game
 
     public Game1()
     {
-        _graphics = new GraphicsDeviceManager(this);
-        _graphics.PreferredBackBufferWidth = 1280;
-        _graphics.PreferredBackBufferHeight = 720;
-        _graphics.IsFullScreen = false;
+        _graphics = new GraphicsDeviceManager(this)
+        {
+            PreferredBackBufferWidth = 1280,
+            PreferredBackBufferHeight = 720,
+            IsFullScreen = false
+        };
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
     }
@@ -93,7 +95,7 @@ public class Game1 : Game
         _text = new SpriteText(GraphicsDevice, contentDir);
 
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
-        _pixel.SetData(new[] { Color.White });
+        _pixel.SetData([Color.White]);
 
         BuildAudio();
         _hum?.Play();
@@ -180,7 +182,7 @@ public class Game1 : Game
         return ToSoundEffect(data, sampleRate);
     }
 
-    private static readonly Random _rngGlobal = new Random(42);
+    private static readonly Random _rngGlobal = new(42);
 
     private static SoundEffect ToSoundEffect(float[] data, int sampleRate)
     {
@@ -333,9 +335,9 @@ public class Game1 : Game
         if (cur.Length > 0) lines.Add(cur);
 
         // per-line jitter values (rolled once per frame in Draw)
-        Span<float> jxs = stackalloc float[] { _jx1, _jx2, _jx3 };
-        Span<float> jys = stackalloc float[] { _jy1, _jy2, _jy3 };
-        Span<float> jrs = stackalloc float[] { _jr1, _jr2, _jr3 };
+        Span<float> jxs = stackalloc float[3] { _jx1, _jx2, _jx3 };
+        Span<float> jys = stackalloc float[3] { _jy1, _jy2, _jy3 };
+        Span<float> jrs = stackalloc float[3] { _jr1, _jr2, _jr3 };
 
         float lineH = size * 1.4f;
         float y = centerTop.Y - (lines.Count - 1) * lineH / 2f;

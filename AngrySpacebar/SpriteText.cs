@@ -84,18 +84,37 @@ public class SpriteText
     public float LineHeight(float pixelSize) => _lineHeight * (pixelSize / BaseSize);
 
     /// <summary>
-    /// The largest pixel size &lt;= <paramref name="maxPixelSize"/> for which the
-    /// string fits within <paramref name="maxWidth"/> pixels. Used to keep text
-    /// from being clipped at the screen edges.
+    /// The pixel size for <paramref name="text"/> that makes it exactly
+    /// <paramref name="maxWidth"/> pixels wide — i.e. as large as possible while
+    /// still fitting inside the window. The result never exceeds
+    /// <paramref name="maxPixelSize"/>, and short strings are enlarged up to
+    /// that cap so lettering always fills the available width without ever
+    /// spilling outside the safe area.
     /// </summary>
     public float FitSize(string text, float maxWidth, float maxPixelSize)
     {
         if (string.IsNullOrEmpty(text)) return maxPixelSize;
         float w = Measure(text, maxPixelSize);
-        if (w <= maxWidth || w <= 0f) return maxPixelSize;
-        // scale down proportionally so the measured width equals maxWidth
+        if (w <= 0f) return maxPixelSize;
+        // scale proportionally so the measured width equals maxWidth (this both
+        // shrinks overly long strings and grows short ones up to the cap)
         float size = maxPixelSize * maxWidth / w;
-        return MathF.Max(size, 1f);
+        return Math.Clamp(size, 1f, maxPixelSize);
+    }
+
+    /// <summary>
+    /// A fixed pixel size guaranteed to fit <paramref name="text"/> within
+    /// <paramref name="maxWidth"/>: the larger of <paramref name="preferredSize"/>
+    /// and whatever size is needed to bring an over-wide string back on screen.
+    /// Text drawn at this size is NEVER clipped horizontally, no matter how long
+    /// the string is or how small the window becomes.
+    /// </summary>
+    public float EnsureFit(string text, float maxWidth, float preferredSize)
+    {
+        if (string.IsNullOrEmpty(text)) return preferredSize;
+        float w = Measure(text, preferredSize);
+        if (w <= maxWidth || w <= 0f) return preferredSize;
+        return MathF.Max(preferredSize * maxWidth / w, 1f);
     }
 
     /// <summary>

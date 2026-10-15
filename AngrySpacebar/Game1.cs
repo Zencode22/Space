@@ -384,10 +384,11 @@ public class Game1 : Game
         float faceX = LogicWidth / 2f;   // X where DrawFace is called below
         float cy = LogicHeight / 2f;
 
-        // All wording is centered on the face's X and auto-shrinks so it ALWAYS
-        // fits the visible screen: both horizontally (FitSize/Wrap vs a max
-        // width) and vertically (each element's height is checked against its
-        // reserved band inside the safe area, shrinking further if needed).
+        // All wording is centered on the face's X and drawn at CONSTANT sizes:
+        // the lettering never grows or shrinks (no anger/flash-driven scaling),
+        // and each element's fixed size is chosen so it always fits inside the
+        // window — both horizontally (EnsureFit/Wrap vs the safe width) and
+        // vertically (each block is checked against its band in the safe area).
         const float margin = 30f;                       // safe-area padding
         float textMaxWidth = LogicWidth - 2 * margin;   // guaranteed on-screen width
         float topSafe = margin;                         // first usable Y
@@ -397,7 +398,8 @@ public class Game1 : Game
         const string InstrStr = "The only button you can use is [SPACE]. Don't.";
 
         // title — occupies the band from the top edge down to the instruction line
-        float titleSize = _text.FitSize(TitleStr, textMaxWidth, 40 + anger * 12 + pressFlash * 6);
+        // fixed base size; EnsureFit keeps it inside the window at any text length
+        float titleSize = _text.EnsureFit(TitleStr, textMaxWidth, 40f);
         // vertical fit: title must stay within its band above the instructions
         float titleBandH = 140f - topSafe;              // room between top edge and instr line
         float titleMaxByH = titleBandH / (_text.LineHeight(1f) * 1.2f);
@@ -407,19 +409,19 @@ public class Game1 : Game
         _text.DrawCentered(_sb, TitleStr,
             new Vector2(faceX, topSafe + titleSize * 0.7f), titleSize, titleColor, titleRot);
 
-        // instruction line
-        float instrSize = _text.FitSize(InstrStr, textMaxWidth, 20);
+        // instruction line (fixed size, always shrunk if it would overflow)
+        float instrSize = _text.EnsureFit(InstrStr, textMaxWidth, 20f);
         _text.DrawCentered(_sb, InstrStr,
             new Vector2(faceX, 160), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
 
-        // current message (the angry voice): wrap to the safe width, then
-        // shrink until ALL wrapped lines fit vertically in the band between
-        // the instruction line and the face (never off-screen, any size).
+        // current message (the angry voice): fixed base size, wrapped to the safe
+        // width, then shrunk only as far as needed so ALL wrapped lines fit
+        // vertically in the band between the instruction line and the face
+        // (never off-screen, no matter how long the message is).
         float msgTopLimit = 185f;                       // start below instruction line
         float msgBottomLimit = cy + 100f;               // stop above the face
         float msgAvailH = msgBottomLimit - msgTopLimit;
-        float msgMaxSize = 24 + anger * 10;
-        float msgSize = msgMaxSize;
+        float msgSize = _text.EnsureFit(_currentMessage, textMaxWidth, 24f);
         var msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
         // shrink until total block height (lines * lineHeight * spacing) fits
         while (msgLines.Count * _text.LineHeight(msgSize) * 1.4f > msgAvailH && msgSize > 8f)
@@ -435,9 +437,9 @@ public class Game1 : Game
         DrawWrapped(_sb, msgLines, new Vector2(faceX, msgCenterY), msgSize, msgColor,
                     jitter: anger * 6f, rotBase: anger * 0.03f);
 
-        // press counter — pinned just above the bottom safe edge
+        // press counter — pinned just above the bottom safe edge (fixed size)
         string pressText = $"Spacebar presses: {_pressCount}";
-        float pressSize = _text.FitSize(pressText, textMaxWidth, 18);
+        float pressSize = _text.EnsureFit(pressText, textMaxWidth, 18f);
         _text.DrawCentered(_sb, pressText,
             new Vector2(faceX, bottomSafe - pressSize * 0.6f), pressSize,
             Color.Lerp(Color.Gray, Color.Yellow, anger));

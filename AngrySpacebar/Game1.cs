@@ -23,9 +23,8 @@ public class Game1 : Game
     private Texture2D _pixel = null!;
 
     // ---- audio ----
-    private SoundEffectInstance[] _boops = new SoundEffectInstance[5];
+    private readonly SoundEffectInstance[] _boops = new SoundEffectInstance[5];
     private SoundEffectInstance? _scream;
-    private float _humVolume = 0f;
     private SoundEffectInstance? _hum;
 
     // ---- game state ----
@@ -53,14 +52,18 @@ public class Game1 : Game
     private int _pressCount = 0;
     private double _gameTime = 0;      // seconds since LoadContent
     private double _lastPressAt = -99; // for flash / shake envelope
-    private double _messageShownAt = 0;
     private string _currentMessage = Messages[0];
-    private bool _defiant = false;     // past max message
 
-    // deterministic per-frame jitter (re-seeded every Draw so it is stable
-    // within a frame but changes between frames)
-    private Random JitterRng = new Random();
-    private float Jitter() => (float)(JitterRng.NextDouble() * 2 - 1);
+    // jitter that changes once per frame (re-seeded at the top of Draw)
+    private readonly Random _jitterRng = new Random();
+    private float _jx1, _jy1, _jr1, _jx2, _jy2, _jr2, _jx3, _jy3, _jr3;
+    private void RerollJitter()
+    {
+        _jx1 = Jitter(); _jy1 = Jitter(); _jr1 = Jitter();
+        _jx2 = Jitter(); _jy2 = Jitter(); _jr2 = Jitter();
+        _jx3 = Jitter(); _jy3 = Jitter(); _jr3 = Jitter();
+    }
+    private float Jitter() => (float)(_jitterRng.NextDouble() * 2 - 1);
 
     public Game1()
     {
@@ -80,9 +83,12 @@ public class Game1 : Game
     protected override void LoadContent()
     {
         _sb = new SpriteBatch(GraphicsDevice);
-        string contentDir = Path.Combine(Content.RootDirectory);
+
+        // Prefer the app-base directory so the game works no matter what the
+        // current working directory happens to be.
+        string contentDir = Path.Combine(AppContext.BaseDirectory, Content.RootDirectory);
         if (!Directory.Exists(contentDir))
-            contentDir = "."; // fallback if run from elsewhere
+            contentDir = Content.RootDirectory; // fallback: relative to CWD
 
         _text = new SpriteText(GraphicsDevice, contentDir);
 
@@ -223,11 +229,7 @@ public class Game1 : Game
         if (_pressCount <= Messages.Length - 1)
             _currentMessage = Messages[_pressCount];
         else
-        {
-            _defiant = true;
             _currentMessage = "DO NOT PRESS THE SPACEBAR!!! (we mean it this time)";
-        }
-        _messageShownAt = _gameTime;
 
         // sound escalation
         int tier = Math.Min(_pressCount - 1, _boops.Length - 1);
@@ -246,7 +248,7 @@ public class Game1 : Game
 
     protected override void Draw(GameTime gameTime)
     {
-        JitterRng = new Random(Environment.TickCount); // fresh jitter each frame
+        RerollJitter(); // fresh jitter values each frame
 
         float anger = Math.Min(1f, _pressCount / 15f);           // 0..1 over 15 presses
         // 1 right after a press, decays to 0 over ~0.6s (drives flash + scream mouth)
@@ -330,14 +332,20 @@ public class Game1 : Game
         }
         if (cur.Length > 0) lines.Add(cur);
 
+        // per-line jitter values (rolled once per frame in Draw)
+        Span<float> jxs = stackalloc float[] { _jx1, _jx2, _jx3 };
+        Span<float> jys = stackalloc float[] { _jy1, _jy2, _jy3 };
+        Span<float> jrs = stackalloc float[] { _jr1, _jr2, _jr3 };
+
         float lineH = size * 1.4f;
         float y = centerTop.Y - (lines.Count - 1) * lineH / 2f;
-        foreach (var line in lines)
+        for (int i = 0; i < lines.Count; i++)
         {
-            float jx = Jitter() * jitter;
-            float jy = Jitter() * jitter;
-            float rot = Jitter() * rotBase;
-            _text.DrawCentered(sb, line, new Vector2(centerTop.X + jx, y + jy), size, color, rot);
+            int k = Math.Min(i, 2);
+            float jx = jxs[k] * jitter;
+            float jy = jys[k] * jitter;
+            float rot = jrs[k] * rotBase;
+            _text.DrawCentered(sb, lines[i], new Vector2(centerTop.X + jx, y + jy), size, color, rot);
             y += lineH;
         }
     }

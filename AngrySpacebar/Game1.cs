@@ -309,62 +309,94 @@ public class Game1 : Game
         float faceX = LogicWidth / 2f;   // X where DrawFace is called below
         float cy = LogicHeight / 2f;
 
-        // All wording is centered on the face's X and drawn at CONSTANT sizes:
-        // the lettering never grows or shrinks (no anger/flash-driven scaling),
-        // and each element's fixed size is chosen so it always fits inside the
-        // window — both horizontally (EnsureFit/Wrap vs the safe width) and
-        // vertically (each block is checked against its band in the safe area).
+        // Every single sentence is laid out to FIT INSIDE the 1280x720 window:
+        // nothing is ever clipped at an edge. Each string is measured with the
+        // real font metrics and, if it doesn't fit, it is word-wrapped across
+        // multiple lines and/or auto-shrunk (FitSize) until the whole block
+        // sits comfortably within the safe margins — for ANY sentence, no
+        // matter how long. Sizes are otherwise constant (no anger-driven
+        // scaling of the lettering).
         const float margin = 30f;                       // safe-area padding
-        float textMaxWidth = LogicWidth - 2 * margin;   // guaranteed on-screen width
+        const float jitterPad = 12f;                    // headroom for per-frame line jitter
+        float textMaxWidth = LogicWidth - 2 * (margin + jitterPad); // guaranteed on-screen width
         float topSafe = margin;                         // first usable Y
         float bottomSafe = LogicHeight - margin;        // last usable Y
 
         const string TitleStr = "DO NOT PRESS THE SPACEBAR";
         const string InstrStr = "The only button you can use is [SPACE]. Don't.";
 
-        // title — occupies the band from the top edge down to the instruction line
-        // fixed base size; EnsureFit keeps it inside the window at any text length
-        float titleSize = _text.EnsureFit(TitleStr, textMaxWidth, 40f);
-        // vertical fit: title must stay within its band above the instructions
+        // Layout helper: wrap a sentence into lines that all fit the safe
+        // width, then shrink the text size step by step until the entire
+        // multi-line block also fits the available height. Guarantees the
+        // WHOLE sentence is visible inside the window at every press count.
+        List<string> FitSentence(string text, float maxPixelSize, float availHeight,
+                                 out float chosenSize)
+        {
+            float size = _text.EnsureFit(text, textMaxWidth, maxPixelSize);
+            var lines = _text.Wrap(text, textMaxWidth, size);
+            while (lines.Count * _text.LineHeight(size) * 1.4f > availHeight && size > 8f)
+            {
+                size -= 2f;
+                lines = _text.Wrap(text, textMaxWidth, size);
+            }
+            chosenSize = size;
+            return _text.Wrap(text, textMaxWidth, size); // final wrap at chosen size
+        }
+
+        // title — occupies the band from the top edge down to the instruction
+        // line; wrapped/shrunk so it always fits horizontally AND vertically.
         float titleBandH = 140f - topSafe;              // room between top edge and instr line
-        float titleMaxByH = titleBandH / (_text.LineHeight(1f) * 1.2f);
-        titleSize = Math.Min(titleSize, titleMaxByH);
+        var titleLines = FitSentence(TitleStr, 40f, titleBandH, out float titleSize);
         Color titleColor = Color.Lerp(Color.White, new Color(255, 80, 80), anger);
         float titleRot = anger * 0.06f * (float)Math.Sin(_gameTime * 8);
-        _text.DrawCentered(_sb, TitleStr,
-            new Vector2(faceX, topSafe + titleSize * 0.7f), titleSize, titleColor, titleRot);
+        if (titleLines.Count == 1)
+        {
+            _text.DrawCentered(_sb, TitleStr,
+                new Vector2(faceX, topSafe + titleSize * 0.7f), titleSize, titleColor, titleRot);
+        }
+        else
+        {
+            // multi-line title: stack the lines downward from the top margin
+            float lineH = titleSize * 1.4f;
+            for (int i = 0; i < titleLines.Count; i++)
+                _text.DrawCentered(_sb, titleLines[i],
+                    new Vector2(faceX, topSafe + titleSize * 0.7f + i * lineH),
+                    titleSize, titleColor, titleRot);
+        }
 
-        // instruction line (fixed size, always shrunk if it would overflow)
-        float instrSize = _text.EnsureFit(InstrStr, textMaxWidth, 20f);
-        _text.DrawCentered(_sb, InstrStr,
-            new Vector2(faceX, 160), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
+        // instruction line — same guarantee: shrinks/wraps so the full
+        // sentence stays inside the window.
+        float instrSize = _text.FitSize(InstrStr, textMaxWidth, 20f);
+        var instrLines = _text.Wrap(InstrStr, textMaxWidth, instrSize);
+        {
+            float lineH = instrSize * 1.4f;
+            float y = 160f - (instrLines.Count - 1) * lineH / 2f;
+            foreach (var ln in instrLines)
+            {
+                _text.DrawCentered(_sb, ln, new Vector2(faceX, y), instrSize,
+                    Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
+                y += lineH;
+            }
+        }
 
-        // current message (the angry voice): fixed base size, wrapped to the safe
-        // width, then shrunk only as far as needed so ALL wrapped lines fit
-        // vertically in the band between the instruction line and the face
-        // (never off-screen, no matter how long the message is).
+        // current message (the angry voice): wrapped to the safe width and
+        // shrunk as far as needed so ALL lines fit vertically in the band
+        // between the instruction line and the face — every sentence, even
+        // the longest rant, is fully on screen.
         float msgTopLimit = 185f;                       // start below instruction line
         float msgBottomLimit = cy + 100f;               // stop above the face
         float msgAvailH = msgBottomLimit - msgTopLimit;
-        float msgSize = _text.EnsureFit(_currentMessage, textMaxWidth, 24f);
-        var msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
-        // shrink until total block height (lines * lineHeight * spacing) fits
-        while (msgLines.Count * _text.LineHeight(msgSize) * 1.4f > msgAvailH && msgSize > 8f)
-        {
-            msgSize -= 2f;
-            msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
-        }
-        // re-wrap one final time at the chosen size to guarantee no line is too wide
-        msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
+        var msgLines = FitSentence(_currentMessage, 24f, msgAvailH, out float msgSize);
         float msgBlockH = msgLines.Count * _text.LineHeight(msgSize) * 1.4f;
         float msgCenterY = Math.Min(cy - 60f, msgTopLimit + msgBlockH / 2f);
         Color msgColor = Color.Lerp(new Color(220, 220, 255), Color.Red, anger);
         DrawWrapped(_sb, msgLines, new Vector2(faceX, msgCenterY), msgSize, msgColor,
                     jitter: anger * 6f, rotBase: anger * 0.03f);
 
-        // press counter — pinned just above the bottom safe edge (fixed size)
+        // press counter — pinned just above the bottom safe edge, shrunk if
+        // the number of digits ever makes it too wide for the window.
         string pressText = $"Spacebar presses: {_pressCount}";
-        float pressSize = _text.EnsureFit(pressText, textMaxWidth, 18f);
+        float pressSize = _text.FitSize(pressText, textMaxWidth, 18f);
         _text.DrawCentered(_sb, pressText,
             new Vector2(faceX, bottomSafe - pressSize * 0.6f), pressSize,
             Color.Lerp(Color.Gray, Color.Yellow, anger));

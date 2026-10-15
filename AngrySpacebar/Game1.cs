@@ -295,26 +295,28 @@ public class Game1 : Game
             DrawRect(_sb, new Rectangle(-50, LogicHeight - 10, LogicWidth + 100, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
         }
 
-        float cx = LogicWidth / 2f;
+        // The central smiley face is the visual anchor of the scene, so its
+        // draw position (faceX) is THE center point used for all wording.
+        float faceX = LogicWidth / 2f;   // X where DrawFace is called below
         float cy = LogicHeight / 2f;
 
-        // all text is centered horizontally and auto-shrinks so it never
+        // all text is centered on the face's X and auto-shrinks so it never
         // gets clipped at the edges of the logic area
         const float textMaxWidth = LogicWidth - 80; // 60px margin each side
 
-        // title
+        // title — centered on the face's X (faceX)
         float titleSize = _text.FitSize("DO NOT PRESS THE SPACEBAR",
             textMaxWidth, 64 + anger * 20 + pressFlash * 10);
         Color titleColor = Color.Lerp(Color.White, new Color(255, 80, 80), anger);
         float titleRot = anger * 0.06f * (float)Math.Sin(_gameTime * 8);
         _text.DrawCentered(_sb, "DO NOT PRESS THE SPACEBAR",
-            new Vector2(cx, 90), titleSize, titleColor, titleRot);
+            new Vector2(faceX, 90), titleSize, titleColor, titleRot);
 
         // instruction line
         float instrSize = _text.FitSize("The only button you can use is [SPACE]. Don't.",
             textMaxWidth, 30);
         _text.DrawCentered(_sb, "The only button you can use is [SPACE]. Don't.",
-            new Vector2(cx, 170), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
+            new Vector2(faceX, 170), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
 
         // current message (the angry voice), wrapped to fit the screen
         float msgMaxSize = 44 + anger * 18;
@@ -327,23 +329,23 @@ public class Game1 : Game
             msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
         }
         Color msgColor = Color.Lerp(new Color(220, 220, 255), Color.Red, anger);
-        DrawWrapped(_sb, msgLines, new Vector2(cx, cy - 60), msgSize, msgColor,
+        DrawWrapped(_sb, msgLines, new Vector2(faceX, cy - 60), msgSize, msgColor,
                     jitter: anger * 6f, rotBase: anger * 0.03f);
 
         // press counter
         string pressText = $"Spacebar presses: {_pressCount}";
         float pressSize = _text.FitSize(pressText, textMaxWidth, 34);
         _text.DrawCentered(_sb, pressText,
-            new Vector2(cx, LogicHeight - 60), pressSize, Color.Lerp(Color.Gray, Color.Yellow, anger));
+            new Vector2(faceX, LogicHeight - 60), pressSize, Color.Lerp(Color.Gray, Color.Yellow, anger));
 
-        // angry face(s)
-        DrawFace(_sb, new Vector2(cx, cy + 190), scale: 1f + anger * 0.6f, anger, pressFlash);
+        // angry face(s) — the central face is the anchor all wording shares
+        DrawFace(_sb, new Vector2(faceX, cy + 190), scale: 1f + anger * 0.6f, anger, pressFlash);
 
         // extra mini-faces at high anger
         if (anger > 0.5f)
         {
-            DrawFace(_sb, new Vector2(cx - 330, cy + 210), 0.6f, anger, pressFlash);
-            DrawFace(_sb, new Vector2(cx + 330, cy + 210), 0.6f, anger, pressFlash);
+            DrawFace(_sb, new Vector2(faceX - 330, cy + 210), 0.6f, anger, pressFlash);
+            DrawFace(_sb, new Vector2(faceX + 330, cy + 210), 0.6f, anger, pressFlash);
         }
 
         _sb.End();

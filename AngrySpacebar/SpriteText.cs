@@ -164,7 +164,12 @@ public class SpriteText
     {
         float scale = pixelSize / BaseSize;
         float adv = _cellWidth * scale;
-        float total = Measure(text, pixelSize);
+        // the text block spans from position.X to position.X + (len-1)*adv,
+        // so its true geometric center is half of that extent. (Measure()
+        // includes a trailing advance for every char, which would shift the
+        // "center" left by half an advance and make text look off-center.)
+        int len = text?.Length ?? 0;
+        float total = len > 0 ? (len - 1) * adv : 0f;
         float ox = total * originXRatio;
         float oy = _lineHeight * scale * originYRatio;
 

@@ -242,9 +242,20 @@ public class Game1 : Game
         _lastPressAt = _gameTime;
 
         if (_pressCount <= Messages.Length - 1)
+        {
             _currentMessage = Messages[_pressCount];
-        else
+        }
+        else if (_pressCount == Messages.Length)
+        {
+            // One press beyond the last listed sentence: show the closing line…
             _currentMessage = "DO NOT PRESS THE SPACEBAR!!! (we mean it this time)";
+        }
+        else
+        {
+            // …and the very next press after that last sentence closes the game.
+            Exit();
+            return;
+        }
 
         // sound escalation
         int tier = Math.Min(_pressCount - 1, _boops.Length - 1);

@@ -300,43 +300,63 @@ public class Game1 : Game
         float faceX = LogicWidth / 2f;   // X where DrawFace is called below
         float cy = LogicHeight / 2f;
 
-        // all text is centered on the face's X and auto-shrinks so it never
-        // gets clipped at the edges of the logic area
-        const float textMaxWidth = LogicWidth - 80; // 60px margin each side
+        // All wording is centered on the face's X and auto-shrinks so it ALWAYS
+        // fits the visible screen: both horizontally (FitSize/Wrap vs a max
+        // width) and vertically (each element's height is checked against its
+        // reserved band inside the safe area, shrinking further if needed).
+        const float margin = 30f;                       // safe-area padding
+        float textMaxWidth = LogicWidth - 2 * margin;   // guaranteed on-screen width
+        float topSafe = margin;                         // first usable Y
+        float bottomSafe = LogicHeight - margin;        // last usable Y
 
-        // title — centered on the face's X (faceX)
-        float titleSize = _text.FitSize("DO NOT PRESS THE SPACEBAR",
-            textMaxWidth, 40 + anger * 12 + pressFlash * 6);
+        const string TitleStr = "DO NOT PRESS THE SPACEBAR";
+        const string InstrStr = "The only button you can use is [SPACE]. Don't.";
+
+        // title — occupies the band from the top edge down to the instruction line
+        float titleSize = _text.FitSize(TitleStr, textMaxWidth, 40 + anger * 12 + pressFlash * 6);
+        // vertical fit: title must stay within its band above the instructions
+        float titleBandH = 140f - topSafe;              // room between top edge and instr line
+        float titleMaxByH = titleBandH / (_text.LineHeight(1f) * 1.2f);
+        titleSize = Math.Min(titleSize, titleMaxByH);
         Color titleColor = Color.Lerp(Color.White, new Color(255, 80, 80), anger);
         float titleRot = anger * 0.06f * (float)Math.Sin(_gameTime * 8);
-        _text.DrawCentered(_sb, "DO NOT PRESS THE SPACEBAR",
-            new Vector2(faceX, 90), titleSize, titleColor, titleRot);
+        _text.DrawCentered(_sb, TitleStr,
+            new Vector2(faceX, topSafe + titleSize * 0.7f), titleSize, titleColor, titleRot);
 
         // instruction line
-        float instrSize = _text.FitSize("The only button you can use is [SPACE]. Don't.",
-            textMaxWidth, 20);
-        _text.DrawCentered(_sb, "The only button you can use is [SPACE]. Don't.",
-            new Vector2(faceX, 170), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
+        float instrSize = _text.FitSize(InstrStr, textMaxWidth, 20);
+        _text.DrawCentered(_sb, InstrStr,
+            new Vector2(faceX, 160), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
 
-        // current message (the angry voice), wrapped to fit the screen
+        // current message (the angry voice): wrap to the safe width, then
+        // shrink until ALL wrapped lines fit vertically in the band between
+        // the instruction line and the face (never off-screen, any size).
+        float msgTopLimit = 185f;                       // start below instruction line
+        float msgBottomLimit = cy + 100f;               // stop above the face
+        float msgAvailH = msgBottomLimit - msgTopLimit;
         float msgMaxSize = 24 + anger * 10;
-        var msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgMaxSize);
         float msgSize = msgMaxSize;
-        // if wrapping produced many lines, shrink until it fits in 3 lines
-        while (msgLines.Count > 3 && msgSize > 14f)
+        var msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
+        // shrink until total block height (lines * lineHeight * spacing) fits
+        while (msgLines.Count * _text.LineHeight(msgSize) * 1.4f > msgAvailH && msgSize > 8f)
         {
-            msgSize -= 4f;
+            msgSize -= 2f;
             msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
         }
+        // re-wrap one final time at the chosen size to guarantee no line is too wide
+        msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
+        float msgBlockH = msgLines.Count * _text.LineHeight(msgSize) * 1.4f;
+        float msgCenterY = Math.Min(cy - 60f, msgTopLimit + msgBlockH / 2f);
         Color msgColor = Color.Lerp(new Color(220, 220, 255), Color.Red, anger);
-        DrawWrapped(_sb, msgLines, new Vector2(faceX, cy - 60), msgSize, msgColor,
+        DrawWrapped(_sb, msgLines, new Vector2(faceX, msgCenterY), msgSize, msgColor,
                     jitter: anger * 6f, rotBase: anger * 0.03f);
 
-        // press counter
+        // press counter — pinned just above the bottom safe edge
         string pressText = $"Spacebar presses: {_pressCount}";
         float pressSize = _text.FitSize(pressText, textMaxWidth, 18);
         _text.DrawCentered(_sb, pressText,
-            new Vector2(faceX, LogicHeight - 60), pressSize, Color.Lerp(Color.Gray, Color.Yellow, anger));
+            new Vector2(faceX, bottomSafe - pressSize * 0.6f), pressSize,
+            Color.Lerp(Color.Gray, Color.Yellow, anger));
 
         // angry face(s) — the central face is the anchor all wording shares
         DrawFace(_sb, new Vector2(faceX, cy + 190), scale: 1f + anger * 0.6f, anger, pressFlash);

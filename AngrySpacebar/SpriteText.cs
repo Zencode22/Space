@@ -80,6 +80,9 @@ public class SpriteText
         return any ? adv + lastVisible : 0f;
     }
 
+    /// <summary>Pixel height of one line of text at the given cap height.</summary>
+    public float LineHeight(float pixelSize) => _lineHeight * (pixelSize / BaseSize);
+
     /// <summary>
     /// The largest pixel size &lt;= <paramref name="maxPixelSize"/> for which the
     /// string fits within <paramref name="maxWidth"/> pixels. Used to keep text

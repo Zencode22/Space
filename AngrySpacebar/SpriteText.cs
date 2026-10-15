@@ -18,7 +18,7 @@ public class SpriteText
     }
 
     private readonly Texture2D _atlas;
-    private readonly Dictionary<char, Glyph> _glyphs = new();
+    private readonly Dictionary<char, Glyph> _glyphs = [];
     private readonly int _lineHeight;
     private readonly int _cellWidth;
 

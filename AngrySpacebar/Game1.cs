@@ -298,26 +298,43 @@ public class Game1 : Game
         float cx = LogicWidth / 2f;
         float cy = LogicHeight / 2f;
 
+        // all text is centered horizontally and auto-shrinks so it never
+        // gets clipped at the edges of the logic area
+        const float textMaxWidth = LogicWidth - 80; // 60px margin each side
+
         // title
-        float titleSize = 64 + anger * 20 + pressFlash * 10;
+        float titleSize = _text.FitSize("DO NOT PRESS THE SPACEBAR",
+            textMaxWidth, 64 + anger * 20 + pressFlash * 10);
         Color titleColor = Color.Lerp(Color.White, new Color(255, 80, 80), anger);
         float titleRot = anger * 0.06f * (float)Math.Sin(_gameTime * 8);
         _text.DrawCentered(_sb, "DO NOT PRESS THE SPACEBAR",
             new Vector2(cx, 90), titleSize, titleColor, titleRot);
 
         // instruction line
+        float instrSize = _text.FitSize("The only button you can use is [SPACE]. Don't.",
+            textMaxWidth, 30);
         _text.DrawCentered(_sb, "The only button you can use is [SPACE]. Don't.",
-            new Vector2(cx, 170), 30, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
+            new Vector2(cx, 170), instrSize, Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
 
-        // current message (the angry voice), wrapped
-        float msgSize = 44 + anger * 18;
+        // current message (the angry voice), wrapped to fit the screen
+        float msgMaxSize = 44 + anger * 18;
+        var msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgMaxSize);
+        float msgSize = msgMaxSize;
+        // if wrapping produced many lines, shrink until it fits in 3 lines
+        while (msgLines.Count > 3 && msgSize > 20f)
+        {
+            msgSize -= 4f;
+            msgLines = _text.Wrap(_currentMessage, textMaxWidth, msgSize);
+        }
         Color msgColor = Color.Lerp(new Color(220, 220, 255), Color.Red, anger);
-        DrawWrapped(_sb, _currentMessage, new Vector2(cx, cy - 60), msgSize, msgColor, maxWidth: 1100,
+        DrawWrapped(_sb, msgLines, new Vector2(cx, cy - 60), msgSize, msgColor,
                     jitter: anger * 6f, rotBase: anger * 0.03f);
 
         // press counter
-        _text.DrawCentered(_sb, $"Spacebar presses: {_pressCount}",
-            new Vector2(cx, LogicHeight - 60), 34, Color.Lerp(Color.Gray, Color.Yellow, anger));
+        string pressText = $"Spacebar presses: {_pressCount}";
+        float pressSize = _text.FitSize(pressText, textMaxWidth, 34);
+        _text.DrawCentered(_sb, pressText,
+            new Vector2(cx, LogicHeight - 60), pressSize, Color.Lerp(Color.Gray, Color.Yellow, anger));
 
         // angry face(s)
         DrawFace(_sb, new Vector2(cx, cy + 190), scale: 1f + anger * 0.6f, anger, pressFlash);
@@ -333,25 +350,9 @@ public class Game1 : Game
         base.Draw(gameTime);
     }
 
-    private void DrawWrapped(SpriteBatch sb, string text, Vector2 centerTop, float size,
-                             Color color, float maxWidth, float jitter, float rotBase)
+    private void DrawWrapped(SpriteBatch sb, List<string> lines, Vector2 centerTop, float size,
+                             Color color, float jitter, float rotBase)
     {
-        // naive word wrap
-        var words = text.Split(' ');
-        var lines = new List<string>();
-        string cur = "";
-        foreach (var w in words)
-        {
-            string test = cur.Length == 0 ? w : cur + " " + w;
-            if (_text.Measure(test, size) > maxWidth)
-            {
-                lines.Add(cur);
-                cur = w;
-            }
-            else cur = test;
-        }
-        if (cur.Length > 0) lines.Add(cur);
-
         // per-line jitter values (rolled once per frame in Draw)
         ReadOnlySpan<float> jxs = stackalloc float[3] { _jx1, _jx2, _jx3 };
         ReadOnlySpan<float> jys = stackalloc float[3] { _jy1, _jy2, _jy3 };

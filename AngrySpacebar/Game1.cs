@@ -101,14 +101,19 @@ public class Game1 : Game
         _graphics.ApplyChanges();
 
         // Center the oversized window on the primary screen so the borders
-        // sit flush at the screen edges. On DesktopGL this call also nudges
-        // SDL to re-sync the client size we just requested.
+        // sit flush at the screen edges. MonoGame's GraphicsAdapter exposes
+        // the current display mode of the default adapter (DesktopGL does
+        // not ship a DisplayInfo type — that API is Windows-UI-specific).
         try
         {
-            var bounds = DisplayInfo.GetDisplay(0).Bounds;
-            Window.Position = new Point(
-                Math.Max(0, (bounds.Width - wantW) / 2),
-                Math.Max(0, (bounds.Height - wantH) / 2));
+            var adapter = GraphicsAdapter.DefaultAdapter;
+            var bounds = adapter?.CurrentDisplayMode?.Bounds;
+            if (bounds is { } b)
+            {
+                Window.Position = new Point(
+                    Math.Max(0, (b.Width - wantW) / 2),
+                    Math.Max(0, (b.Height - wantH) / 2));
+            }
         }
         catch
         {

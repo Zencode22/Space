@@ -92,8 +92,7 @@ public class Game1 : Game
         var screen = GraphicsAdapter.DefaultAdapter?.CurrentDisplayMode;
         int wantW = LogicWidth * 2;
         int wantH = LogicHeight * 2;
-        int x = 0, y = 0;
-        bool restored = TryReadSavedWindow(out x, out y, out int sw, out int sh);
+        bool restored = TryReadSavedWindow(out int x, out int y, out int sw, out int sh);
         if (restored && sw >= 320 && sh >= 200)
         {
             wantW = sw;
@@ -104,24 +103,45 @@ public class Game1 : Game
             wantW = Math.Min(wantW, (int)(screen.Width * 0.9));
             wantH = Math.Min(wantH, (int)(screen.Height * 0.9));
         }
-        Window.ClientBounds = new Rectangle(x, y, wantW, wantH);
+
+        // ClientBounds is read-only; set the size through the graphics device
+        // manager instead, which resizes the window's client area to match.
+        _graphics.PreferredBackBufferWidth = wantW;
+        _graphics.PreferredBackBufferHeight = wantH;
+        _graphics.ApplyChanges();
+        if (restored)
+            Window.Position = new Point(x, y);
 
         // Keep the back buffer in sync with the window so the scaled output
         // fills it exactly (no blurry upscale / black bars inside the window).
         Window.ClientSizeChanged += (_, _) =>
         {
-            var pp = GraphicsDevice.PresentationParameters;
             int w = Window.ClientBounds.Width;
             int h = Window.ClientBounds.Height;
-            if (pp.BackBufferWidth != w || pp.BackBufferHeight != h)
+            if (_graphics.PreferredBackBufferWidth != w || _graphics.PreferredBackBufferHeight != h)
             {
-                pp.BackBufferWidth = w;
-                pp.BackBufferHeight = h;
-                ApplyChanges();
+                _graphics.PreferredBackBufferWidth = w;
+                _graphics.PreferredBackBufferHeight = h;
+                _graphics.ApplyChanges();
             }
         };
 
+        // Remember the window size/position between runs (MonoGame exposes an
+        // Exiting event rather than a virtual OnExiting method).
+        Exiting += (_, _) => SaveWindowSize();
+
         base.Initialize();
+    }
+
+    private void SaveWindowSize()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(SavedWindowPath)!);
+            File.WriteAllText(SavedWindowPath,
+                $"{Window.ClientBounds.X} {Window.ClientBounds.Y} {Window.ClientBounds.Width} {Window.ClientBounds.Height}");
+        }
+        catch { /* non-critical */ }
     }
 
     private static string SavedWindowPath
@@ -148,19 +168,6 @@ public class Game1 : Game
         catch { /* ignore */ }
         x = y = w = h = 0;
         return false;
-    }
-
-    protected override void OnExiting(object? sender, EventArgs args)
-    {
-        // Remember the window size/position between runs.
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(SavedWindowPath)!);
-            File.WriteAllText(SavedWindowPath,
-                $"{Window.ClientBounds.X} {Window.ClientBounds.Y} {Window.ClientBounds.Width} {Window.ClientBounds.Height}");
-        }
-        catch { /* non-critical */ }
-        base.OnExiting(sender, args);
     }
 
     protected override void LoadContent()

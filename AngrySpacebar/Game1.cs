@@ -71,7 +71,9 @@ public class Game1 : Game
         {
             PreferredBackBufferWidth = LogicWidth,
             PreferredBackBufferHeight = LogicHeight,
-            IsFullScreen = true // launch straight into fullscreen
+            // Windowed fullscreen: covers the whole screen but keeps the
+            // normal window border/title bar (no exclusive-mode takeover).
+            IsFullScreen = false
         };
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
@@ -83,22 +85,38 @@ public class Game1 : Game
         IsFixedTimeStep = true;
         TargetElapsedTime = TimeSpan.FromTicks(166667);
 
-        // Run fullscreen at the monitor's native resolution. Rendering still
-        // happens in the 1280x720 virtual space and is letterbox-fit/scaled to
-        // the back buffer, so everything stays centered and fully on-screen.
+        // Windowed fullscreen: size the window's client area to the monitor's
+        // native resolution while keeping the standard window border/title
+        // bar (IsFullScreen stays false, so no exclusive-mode display
+        // takeover). Rendering still happens in the 1280x720 virtual space
+        // and is letterbox-fit/scaled to the back buffer, so everything stays
+        // centered and fully on-screen.
         var screen = GraphicsAdapter.DefaultAdapter?.CurrentDisplayMode;
         int wantW = screen?.Width ?? LogicWidth * 2;
         int wantH = screen?.Height ?? LogicHeight * 2;
 
-        // ClientBounds is read-only; set the size through the graphics device
-        // manager instead, which resizes the window's client area to match.
         _graphics.PreferredBackBufferWidth = wantW;
         _graphics.PreferredBackBufferHeight = wantH;
-        _graphics.IsFullScreen = true;
+        _graphics.IsFullScreen = false;
         _graphics.ApplyChanges();
 
-        // Keep the back buffer in sync if the display mode / window ever
-        // changes (e.g. the user switches monitors) so the scaled output keeps
+        // Center the oversized window on the primary screen so the borders
+        // sit flush at the screen edges. On DesktopGL this call also nudges
+        // SDL to re-sync the client size we just requested.
+        try
+        {
+            var bounds = DisplayInfo.GetDisplay(0).Bounds;
+            Window.Position = new Point(
+                Math.Max(0, (bounds.Width - wantW) / 2),
+                Math.Max(0, (bounds.Height - wantH) / 2));
+        }
+        catch
+        {
+            // No display info available (e.g. headless) – keep default placement.
+        }
+
+        // Keep the back buffer in sync if the window/display ever changes
+        // (e.g. the user switches monitors) so the scaled output keeps
         // filling the screen exactly.
         Window.ClientSizeChanged += (_, _) =>
         {
@@ -109,13 +127,14 @@ public class Game1 : Game
             {
                 _graphics.PreferredBackBufferWidth = w;
                 _graphics.PreferredBackBufferHeight = h;
-                _graphics.IsFullScreen = true;
+                _graphics.IsFullScreen = false;
                 _graphics.ApplyChanges();
             }
         };
 
-        // The game always opens fullscreen at the monitor's native resolution,
-        // so there is no window size/position to remember between runs.
+        // The game always opens in windowed-fullscreen at the monitor's
+        // native resolution, so there is no window size/position to remember
+        // between runs.
 
         base.Initialize();
     }

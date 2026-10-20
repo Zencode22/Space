@@ -47,7 +47,7 @@ public class Game1 : Game
     public SentenceRenderer Sentences { get; private set; } = null!;
     public AngryFace Face { get; private set; } = null!;
 
-    private DrawableBase[] _drawables = [];
+    private readonly DrawableBase[] _drawables;
 
     public Game1()
     {

@@ -25,13 +25,18 @@ namespace AngrySpacebar;
 /// </summary>
 public class Game1 : Game
 {
+    private const int LogicWidth = 1280;
+    private const int LogicHeight = 720;
+
     private readonly GraphicsDeviceManager _graphics;
+    private SpriteBatch _sb = null!;
+    private SpriteText _text = null!;
 
     /// <summary>The single shared sprite batch (begun by Draw each frame).</summary>
-    public SpriteBatch Sprites { get; private set; } = null!;
+    public SpriteBatch Sprites => _sb;
 
     /// <summary>The loaded sprite-sheet font, shared by all text drawables.</summary>
-    public SpriteText Text { get; private set; } = null!;
+    public SpriteText Text => _text;
 
     // ---- components ----
     public InputManager Input { get; private set; } = null!;
@@ -48,8 +53,8 @@ public class Game1 : Game
     {
         _graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = DrawableBase.LogicWidth,
-            PreferredBackBufferHeight = DrawableBase.LogicHeight,
+            PreferredBackBufferWidth = LogicWidth,
+            PreferredBackBufferHeight = LogicHeight,
             // Plain fixed-size window; there is no fullscreen mode.
             IsFullScreen = false
         };
@@ -83,11 +88,11 @@ public class Game1 : Game
         IsFixedTimeStep = true;
         TargetElapsedTime = TimeSpan.FromTicks(166667);
 
-        // The game runs in a plain windowed mode only — no fullscreen of any
-        // kind. The back buffer matches the 1280x720 virtual logic space, so
-        // rendering is 1:1 and nothing needs scaling to a monitor resolution.
-        _graphics.PreferredBackBufferWidth = DrawableBase.LogicWidth;
-        _graphics.PreferredBackBufferHeight = DrawableBase.LogicHeight;
+        // Plain fixed-size window only — no fullscreen of any kind. The back
+        // buffer matches the 1280x720 virtual logic space, so rendering is
+        // 1:1 and every sentence fits the window by construction.
+        _graphics.PreferredBackBufferWidth = LogicWidth;
+        _graphics.PreferredBackBufferHeight = LogicHeight;
         _graphics.IsFullScreen = false;
         _graphics.ApplyChanges();
 
@@ -102,7 +107,7 @@ public class Game1 : Game
 
     protected override void LoadContent()
     {
-        Sprites = new SpriteBatch(GraphicsDevice);
+        _sb = new SpriteBatch(GraphicsDevice);
 
         // Prefer the app-base directory so the game works no matter what the
         // current working directory happens to be.
@@ -110,7 +115,7 @@ public class Game1 : Game
         if (!Directory.Exists(contentDir))
             contentDir = Content.RootDirectory; // fallback: relative to CWD
 
-        Text = new SpriteText(GraphicsDevice, contentDir);
+        _text = new SpriteText(GraphicsDevice, contentDir);
 
         base.LoadContent();
     }
@@ -127,12 +132,11 @@ public class Game1 : Game
         // whole game is always visible, no matter the window/display size.
         int bufW = GraphicsDevice.PresentationParameters.BackBufferWidth;
         int bufH = GraphicsDevice.PresentationParameters.BackBufferHeight;
-        float scaleX = bufW / (float)DrawableBase.LogicWidth;
-        float scaleY = bufH / (float)DrawableBase.LogicHeight;
+        float scaleX = bufW / (float)LogicWidth;
+        float scaleY = bufH / (float)LogicHeight;
         float fitScale = Math.Min(scaleX, scaleY);
-        // center the scaled logic area in the window
-        float offX = (bufW - DrawableBase.LogicWidth * fitScale) / 2f;
-        float offY = (bufH - DrawableBase.LogicHeight * fitScale) / 2f;
+        float offX = (bufW - LogicWidth * fitScale) / 2f;
+        float offY = (bufH - LogicHeight * fitScale) / 2f;
         Matrix transform = Matrix.CreateTranslation(offX, offY, 0) *
                            Matrix.CreateScale(fitScale, fitScale, 1) *
                            Matrix.CreateTranslation(shake.X, shake.Y, 0);
@@ -141,16 +145,15 @@ public class Game1 : Game
 
         // Single batch pass shared by all drawables (sorted by DrawOrder):
         // background/vignette -> sentences -> faces.
-        Sprites.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
-                      SamplerState.PointClamp, transformMatrix: transform);
+        _sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+                  SamplerState.PointClamp, transformMatrix: transform);
 
         foreach (var d in _drawables.OrderBy(d => d.DrawOrder))
             d.Draw(in scene);
 
-        Sprites.End();
+        _sb.End();
 
         // Note: the framework's own drawable-component loop is intentionally
         // skipped here — every visual is painted inside the single batch above.
-        // (Their Draw overrides are no-ops / not driven by base.Draw.)
     }
 }

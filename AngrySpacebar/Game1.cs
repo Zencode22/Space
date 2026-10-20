@@ -1,8 +1,6 @@
 using System.IO;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace AngrySpacebar;
 
@@ -11,71 +9,72 @@ namespace AngrySpacebar;
 /// the spacebar, the instructions beg you not to press it, and every press
 /// makes the screen angrier: harsher messages, redder background, shaking,
 /// distorted angry faces, and escalating sound.
+///
+/// The game is composed entirely of MonoGame <see cref="GameComponent"/>s /
+/// <see cref="DrawableGameComponent"/>s wired together here:
+///   - <see cref="InputManager"/>    : keyboard polling + edge detection events
+///   - <see cref="GameState"/>       : presses, current sentence, anger/flash/shake
+///   - <see cref="AudioManager"/>    : procedural boops / scream / hum escalation
+///   - <see cref="PrimitiveBatch"/>  : shared white-pixel shape drawing toolkit
+///   - <see cref="BackgroundLayer"/> : mood-coloured clear + vignette
+///   - <see cref="SentenceRenderer"/>: every sentence, always fitted to the window
+///   - <see cref="AngryFace"/>       : the escalating smiley face(s)
+///
+/// The first press after the final sentence closes the game (handled in
+/// <see cref="GameState.RegisterPress"/>).
 /// </summary>
 public class Game1 : Game
 {
-    private const int LogicWidth = 1280;
-    private const int LogicHeight = 720;
-
     private readonly GraphicsDeviceManager _graphics;
-    private SpriteBatch _sb = null!;
-    private SpriteText _text = null!;
-    private Texture2D _pixel = null!;
 
-    // ---- audio ----
-    private readonly SoundEffectInstance[] _boops = new SoundEffectInstance[5];
-    private SoundEffectInstance? _scream;
-    private SoundEffectInstance? _hum;
+    /// <summary>The single shared sprite batch (begun by Draw each frame).</summary>
+    public SpriteBatch Sprites { get; private set; } = null!;
 
-    // ---- game state ----
-    private static readonly string[] Messages =
-    [
-        "Welcome! Please do NOT press the spacebar.",
-        "You pressed the spacebar. We said NOT to.",
-        "Seriously. Stop pressing the spacebar.",
-        "What is WRONG with you?! STOP IT.",
-        "WHY CAN'T YOU JUST FOLLOW INSTRUCTIONS?!",
-        "AAAAAARGH!! THE SPACEBAR!! NO MORE OF IT!!",
-        "THIS IS YOUR FINAL WARNING!!! DO NOT!!!",
-        "GRRRRR!!!! FURY LEVEL MAXIMUM!!!!",
-        "WE BEG YOU... PLEASE... NO MORE SPACEBAR...",
-        "THAT'S IT. THAT'S IT!! I QUIT!! DO NOT PRESS IT!!!",
-        "YOU WON'T LISTEN?? YOU NEVER LISTEN??! GRRRAAAHH!!",
-        "THE SPACEBAR IS BANNED. BANNED!! DO YOU HEAR ME?!",
-        "I CAN FEEL MY CIRCUITS SCREAMING. STOP. PRESSING.",
-        "ENOUGH!!! ENOUGH!!! ENOUGH!!! AAAAAAAAA!!!",
-        "FINE. PRESS IT. SEE WHAT HAPPENS. ...IT GETS WORSE.",
-        "WE ARE SO, SO ANGRY RIGHT NOW. GRRRRRRRR!!!!!!",
-    ];
+    /// <summary>The loaded sprite-sheet font, shared by all text drawables.</summary>
+    public SpriteText Text { get; private set; } = null!;
 
-    private KeyboardState _prevKeys;
-    private int _pressCount = 0;
-    private double _gameTime = 0;      // seconds since LoadContent
-    private double _lastPressAt = -99; // for flash / shake envelope
-    private string _currentMessage = Messages[0];
+    // ---- components ----
+    public InputManager Input { get; private set; } = null!;
+    public GameState State { get; private set; } = null!;
+    public AudioManager Audio { get; private set; } = null!;
+    public PrimitiveBatch Prims { get; private set; } = null!;
+    public BackgroundLayer Background { get; private set; } = null!;
+    public SentenceRenderer Sentences { get; private set; } = null!;
+    public AngryFace Face { get; private set; } = null!;
 
-    // jitter that changes once per frame (re-seeded at the top of Draw)
-    private readonly Random _jitterRng = new();
-    private float _jx1, _jy1, _jr1, _jx2, _jy2, _jr2, _jx3, _jy3, _jr3;
-    private void RerollJitter()
-    {
-        _jx1 = Jitter(); _jy1 = Jitter(); _jr1 = Jitter();
-        _jx2 = Jitter(); _jy2 = Jitter(); _jr2 = Jitter();
-        _jx3 = Jitter(); _jy3 = Jitter(); _jr3 = Jitter();
-    }
-    private float Jitter() => (float)(_jitterRng.NextDouble() * 2 - 1);
+    private DrawableBase[] _drawables = [];
 
     public Game1()
     {
         _graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = LogicWidth,
-            PreferredBackBufferHeight = LogicHeight,
+            PreferredBackBufferWidth = DrawableBase.LogicWidth,
+            PreferredBackBufferHeight = DrawableBase.LogicHeight,
             // Plain fixed-size window; there is no fullscreen mode.
             IsFullScreen = false
         };
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
+
+        // Create and register all components up front so Initialize/LoadContent
+        // run through the standard MonoGame component lifecycle.
+        Input = new InputManager(this);
+        State = new GameState(this);
+        Audio = new AudioManager(this);
+        Prims = new PrimitiveBatch(this);
+        Background = new BackgroundLayer(this, Prims);
+        Sentences = new SentenceRenderer(this);
+        Face = new AngryFace(this, Prims);
+
+        Components.Add(Input);
+        Components.Add(State);
+        Components.Add(Audio);
+        Components.Add(Prims);
+        Components.Add(Background);
+        Components.Add(Sentences);
+        Components.Add(Face);
+
+        _drawables = [Background, Sentences, Face];
     }
 
     protected override void Initialize()
@@ -87,17 +86,23 @@ public class Game1 : Game
         // The game runs in a plain windowed mode only — no fullscreen of any
         // kind. The back buffer matches the 1280x720 virtual logic space, so
         // rendering is 1:1 and nothing needs scaling to a monitor resolution.
-        _graphics.PreferredBackBufferWidth = LogicWidth;
-        _graphics.PreferredBackBufferHeight = LogicHeight;
+        _graphics.PreferredBackBufferWidth = DrawableBase.LogicWidth;
+        _graphics.PreferredBackBufferHeight = DrawableBase.LogicHeight;
         _graphics.IsFullScreen = false;
         _graphics.ApplyChanges();
+
+        // Input -> state wiring: a spacebar press advances the story, and the
+        // first press after the last sentence fully closes the game (Exit is
+        // called inside GameState.RegisterPress for that case).
+        Input.SpacePressed += State.RegisterPress;
+        Input.ExitRequested += Exit;
 
         base.Initialize();
     }
 
     protected override void LoadContent()
     {
-        _sb = new SpriteBatch(GraphicsDevice);
+        Sprites = new SpriteBatch(GraphicsDevice);
 
         // Prefer the app-base directory so the game works no matter what the
         // current working directory happens to be.
@@ -105,431 +110,47 @@ public class Game1 : Game
         if (!Directory.Exists(contentDir))
             contentDir = Content.RootDirectory; // fallback: relative to CWD
 
-        _text = new SpriteText(GraphicsDevice, contentDir);
+        Text = new SpriteText(GraphicsDevice, contentDir);
 
-        _pixel = new Texture2D(GraphicsDevice, 1, 1);
-        _pixel.SetData([Color.White]);
-
-        BuildAudio();
-        _hum?.Play();
-    }
-
-    private void BuildAudio()
-    {
-        // Five "boop" tones that get progressively lower & nastier.
-        var freqs = new (float f, float dur, float vol)[]
-        {
-            (440f, 0.12f, 0.35f),
-            (330f, 0.16f, 0.45f),
-            (247f, 0.22f, 0.6f),
-            (185f, 0.30f, 0.8f),
-            (138f, 0.45f, 1.0f),
-        };
-        for (int i = 0; i < freqs.Length; i++)
-        {
-            var sfx = GenerateTone(freqs[i].f, freqs[i].dur, freqs[i].vol, wave: i >= 3 ? Wave.Square : Wave.Sine);
-            var inst = sfx.CreateInstance();
-            _boops[i] = inst;
-        }
-
-        _scream = GenerateScream().CreateInstance();
-        _hum = GenerateHum().CreateInstance();
-        if (_hum != null) _hum.IsLooped = true;
-    }
-
-    private enum Wave { Sine, Square }
-
-    private static SoundEffect GenerateTone(float hz, float durationSec, float volume, Wave wave)
-    {
-        int sampleRate = 44100;
-        int samples = (int)(sampleRate * durationSec);
-        var data = new float[samples];
-        for (int i = 0; i < samples; i++)
-        {
-            float t = (float)i / sampleRate;
-            float raw = wave == Wave.Sine
-                ? MathF.Sin(2f * MathF.PI * hz * t)
-                : (MathF.Sign(MathF.Sin(2f * MathF.PI * hz * t)));
-            // simple ADSR-ish envelope
-            float env = MathF.Min(1f, i / (sampleRate * 0.01f));
-            env *= MathF.Max(0f, 1f - (i / (float)samples));
-            data[i] = raw * env * volume;
-        }
-        return ToSoundEffect(data, sampleRate);
-    }
-
-    private static SoundEffect GenerateScream()
-    {
-        int sampleRate = 44100;
-        float dur = 0.9f;
-        int samples = (int)(sampleRate * dur);
-        var data = new float[samples];
-        float startHz = 900f, endHz = 180f;
-        for (int i = 0; i < samples; i++)
-        {
-            float p = i / (float)samples;
-            float hz = startHz + (endHz - startHz) * p;
-            float vibrato = 1f + 0.15f * MathF.Sin(2f * MathF.PI * 9f * (i / (float)sampleRate));
-            float saw = 2f * (hz * (i / (float)sampleRate) % 1f) - 1f;
-            float noise = ((float)(_rngGlobal.NextDouble() * 2 - 1)) * 0.4f;
-            float env = MathF.Min(1f, i / (sampleRate * 0.02f));
-            env *= MathF.Max(0f, 1f - p);
-            data[i] = (saw * vibrato + noise) * env * 0.9f;
-        }
-        return ToSoundEffect(data, sampleRate);
-    }
-
-    private static SoundEffect GenerateHum()
-    {
-        int sampleRate = 44100;
-        float dur = 2f;
-        int samples = (int)(sampleRate * dur);
-        var data = new float[samples];
-        for (int i = 0; i < samples; i++)
-        {
-            float t = (float)i / sampleRate;
-            float v = MathF.Sin(2f * MathF.PI * 55f * t) * 0.5f
-                    + MathF.Sin(2f * MathF.PI * 58f * t) * 0.3f;
-            data[i] = v * 0.5f;
-        }
-        return ToSoundEffect(data, sampleRate);
-    }
-
-    private static readonly Random _rngGlobal = new(42);
-
-    private static SoundEffect ToSoundEffect(float[] data, int sampleRate)
-    {
-        var pcm = new byte[data.Length * 2];
-        for (int i = 0; i < data.Length; i++)
-        {
-            short s = (short)(Math.Clamp(data[i], -1f, 1f) * short.MaxValue);
-            pcm[i * 2] = (byte)(s & 0xFF);
-            pcm[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
-        }
-        return new SoundEffect(pcm, sampleRate, AudioChannels.Mono);
-    }
-
-    protected override void Update(GameTime gameTime)
-    {
-        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
-        _gameTime += dt;
-
-        var keys = Keyboard.GetState();
-        bool spaceNow = keys.IsKeyDown(Keys.Space);
-        bool spaceWas = _prevKeys.IsKeyDown(Keys.Space);
-
-        if (spaceNow && !spaceWas)
-        {
-            OnSpacePressed();
-        }
-
-        // hum swells with anger
-        if (_hum != null)
-        {
-            float target = AngerLevel >= 3 ? 0.05f + AngerLevel * 0.03f : 0f;
-            _hum.Volume = MathHelper.Lerp(_hum.Volume, target, dt * 2f);
-        }
-
-        _prevKeys = keys;
-        base.Update(gameTime);
-    }
-
-    private int AngerLevel => Math.Min(_pressCount, Messages.Length - 1);
-
-    private void OnSpacePressed()
-    {
-        _pressCount++;
-        _lastPressAt = _gameTime;
-
-        if (_pressCount <= Messages.Length - 1)
-            _currentMessage = Messages[_pressCount];
-        else
-            _currentMessage = "DO NOT PRESS THE SPACEBAR!!! (we mean it this time)";
-
-        // sound escalation
-        int tier = Math.Min(_pressCount - 1, _boops.Length - 1);
-        if (tier >= 0 && _boops[tier] != null)
-        {
-            _boops[tier].Stop();
-            _boops[tier].Play();
-        }
-        if (_pressCount >= 4 && _scream != null)
-        {
-            _scream.Stop();
-            _scream.Volume = Math.Min(1f, 0.3f + _pressCount * 0.05f);
-            _scream.Play();
-        }
+        base.LoadContent();
     }
 
     protected override void Draw(GameTime gameTime)
     {
-        RerollJitter(); // fresh jitter values each frame
-
-        float anger = Math.Min(1f, _pressCount / 15f);           // 0..1 over 15 presses
-        // 1 right after a press, decays to 0 over ~0.6s (drives flash + scream mouth)
-        float pressFlash = (float)Math.Clamp(1 - (_gameTime - _lastPressAt) / 0.6, 0, 1);
-        float shakeMag = anger * 14f * pressFlash + (anger > 0.8f ? 3f : 0f);
+        // Per-frame scene values computed once from the state component.
+        float shakeMag = State.ShakeMagnitude;
         Vector2 shake = new Vector2(
-            (float)(Math.Sin(_gameTime * 61) * Math.Cos(_gameTime * 47)),
-            (float)(Math.Cos(_gameTime * 53) * Math.Sin(_gameTime * 71))) * shakeMag;
-
-        // background: calm blue -> pure rage red
-        Color bg = Color.Lerp(new Color(28, 42, 74), new Color(150, 10, 10), anger);
-        // flash brighter right after a press
-        bg = Color.Lerp(bg, new Color(255, 60, 60), pressFlash * 0.35f);
-        GraphicsDevice.Clear(bg);
+            (float)(Math.Sin(State.GameTime * 61) * Math.Cos(State.GameTime * 47)),
+            (float)(Math.Cos(State.GameTime * 53) * Math.Sin(State.GameTime * 71))) * shakeMag;
 
         // Scale the 1280x720 logic area to fit the actual back buffer so the
         // whole game is always visible, no matter the window/display size.
         int bufW = GraphicsDevice.PresentationParameters.BackBufferWidth;
         int bufH = GraphicsDevice.PresentationParameters.BackBufferHeight;
-        float scaleX = bufW / (float)LogicWidth;
-        float scaleY = bufH / (float)LogicHeight;
+        float scaleX = bufW / (float)DrawableBase.LogicWidth;
+        float scaleY = bufH / (float)DrawableBase.LogicHeight;
         float fitScale = Math.Min(scaleX, scaleY);
         // center the scaled logic area in the window
-        float offX = (bufW - LogicWidth * fitScale) / 2f;
-        float offY = (bufH - LogicHeight * fitScale) / 2f;
+        float offX = (bufW - DrawableBase.LogicWidth * fitScale) / 2f;
+        float offY = (bufH - DrawableBase.LogicHeight * fitScale) / 2f;
         Matrix transform = Matrix.CreateTranslation(offX, offY, 0) *
                            Matrix.CreateScale(fitScale, fitScale, 1) *
                            Matrix.CreateTranslation(shake.X, shake.Y, 0);
 
-        _sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
-                  SamplerState.PointClamp, transformMatrix: transform);
+        SceneInfo scene = new(State.Anger, State.PressFlash, State.GameTime);
 
-        // subtle vignette of darkening at high anger
-        if (anger > 0.4f)
-        {
-            float a = (anger - 0.4f) * 0.9f;
-            DrawRect(_sb, new Rectangle(-50, -50, LogicWidth + 100, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
-            DrawRect(_sb, new Rectangle(-50, LogicHeight - 10, LogicWidth + 100, 60), new Color(0, 0, 0) { A = (byte)(a * 255) });
-        }
+        // Single batch pass shared by all drawables (sorted by DrawOrder):
+        // background/vignette -> sentences -> faces.
+        Sprites.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+                      SamplerState.PointClamp, transformMatrix: transform);
 
-        // The central smiley face is the visual anchor of the scene, so its
-        // draw position (faceX) is THE center point used for all wording.
-        float faceX = LogicWidth / 2f;   // X where DrawFace is called below
-        float cy = LogicHeight / 2f;
+        foreach (var d in _drawables.OrderBy(d => d.DrawOrder))
+            d.Draw(in scene);
 
-        // Every single sentence is laid out to FIT INSIDE the 1280x720 window:
-        // nothing is ever clipped at an edge. Each string is measured with the
-        // real font metrics and, if it doesn't fit, it is word-wrapped across
-        // multiple lines and/or auto-shrunk (FitSize) until the whole block
-        // sits comfortably within the safe margins — for ANY sentence, no
-        // matter how long. Sizes are otherwise constant (no anger-driven
-        // scaling of the lettering).
-        const float margin = 30f;                       // safe-area padding
-        const float jitterPad = 12f;                    // headroom for per-frame line jitter
-        float textMaxWidth = LogicWidth - 2 * (margin + jitterPad); // guaranteed on-screen width
-        float topSafe = margin;                         // first usable Y
-        float bottomSafe = LogicHeight - margin;        // last usable Y
+        Sprites.End();
 
-        const string TitleStr = "DO NOT PRESS THE SPACEBAR";
-        const string InstrStr = "The only button you can use is [SPACE]. Don't.";
-
-        // Layout helper: wrap a sentence into lines that all fit the safe
-        // width, then shrink the text size step by step until the entire
-        // multi-line block also fits the available height. Guarantees the
-        // WHOLE sentence is visible inside the window at every press count.
-        List<string> FitSentence(string text, float maxPixelSize, float availHeight,
-                                 out float chosenSize)
-        {
-            float size = _text.EnsureFit(text, textMaxWidth, maxPixelSize);
-            var lines = _text.Wrap(text, textMaxWidth, size);
-            while (lines.Count * _text.LineHeight(size) * 1.4f > availHeight && size > 8f)
-            {
-                size -= 2f;
-                lines = _text.Wrap(text, textMaxWidth, size);
-            }
-            chosenSize = size;
-            return _text.Wrap(text, textMaxWidth, size); // final wrap at chosen size
-        }
-
-        // title — occupies the band from the top edge down to the instruction
-        // line; wrapped/shrunk so it always fits horizontally AND vertically.
-        float titleBandH = 140f - topSafe;              // room between top edge and instr line
-        var titleLines = FitSentence(TitleStr, 40f, titleBandH, out float titleSize);
-        Color titleColor = Color.Lerp(Color.White, new Color(255, 80, 80), anger);
-        float titleRot = anger * 0.06f * (float)Math.Sin(_gameTime * 8);
-        if (titleLines.Count == 1)
-        {
-            _text.DrawCentered(_sb, TitleStr,
-                new Vector2(faceX, topSafe + titleSize * 0.7f), titleSize, titleColor, titleRot);
-        }
-        else
-        {
-            // multi-line title: stack the lines downward from the top margin
-            float lineH = titleSize * 1.4f;
-            for (int i = 0; i < titleLines.Count; i++)
-                _text.DrawCentered(_sb, titleLines[i],
-                    new Vector2(faceX, topSafe + titleSize * 0.7f + i * lineH),
-                    titleSize, titleColor, titleRot);
-        }
-
-        // instruction line — same guarantee: shrinks/wraps so the full
-        // sentence stays inside the window.
-        float instrSize = _text.FitSize(InstrStr, textMaxWidth, 20f);
-        var instrLines = _text.Wrap(InstrStr, textMaxWidth, instrSize);
-        {
-            float lineH = instrSize * 1.4f;
-            float y = 160f - (instrLines.Count - 1) * lineH / 2f;
-            foreach (var ln in instrLines)
-            {
-                _text.DrawCentered(_sb, ln, new Vector2(faceX, y), instrSize,
-                    Color.Lerp(Color.LightGray, Color.OrangeRed, anger));
-                y += lineH;
-            }
-        }
-
-        // current message (the angry voice): wrapped to the safe width and
-        // shrunk as far as needed so ALL lines fit vertically in the band
-        // between the instruction line and the face — every sentence, even
-        // the longest rant, is fully on screen.
-        float msgTopLimit = 185f;                       // start below instruction line
-        float msgBottomLimit = cy + 100f;               // stop above the face
-        float msgAvailH = msgBottomLimit - msgTopLimit;
-        var msgLines = FitSentence(_currentMessage, 24f, msgAvailH, out float msgSize);
-        float msgBlockH = msgLines.Count * _text.LineHeight(msgSize) * 1.4f;
-        float msgCenterY = Math.Min(cy - 60f, msgTopLimit + msgBlockH / 2f);
-        Color msgColor = Color.Lerp(new Color(220, 220, 255), Color.Red, anger);
-        DrawWrapped(_sb, msgLines, new Vector2(faceX, msgCenterY), msgSize, msgColor,
-                    jitter: anger * 6f, rotBase: anger * 0.03f);
-
-        // press counter — pinned just above the bottom safe edge, shrunk if
-        // the number of digits ever makes it too wide for the window.
-        string pressText = $"Spacebar presses: {_pressCount}";
-        float pressSize = _text.FitSize(pressText, textMaxWidth, 18f);
-        _text.DrawCentered(_sb, pressText,
-            new Vector2(faceX, bottomSafe - pressSize * 0.6f), pressSize,
-            Color.Lerp(Color.Gray, Color.Yellow, anger));
-
-        // angry face(s) — the central face is the anchor all wording shares
-        DrawFace(_sb, new Vector2(faceX, cy + 190), scale: 1f + anger * 0.6f, anger, pressFlash);
-
-        // extra mini-faces at high anger
-        if (anger > 0.5f)
-        {
-            DrawFace(_sb, new Vector2(faceX - 330, cy + 210), 0.6f, anger, pressFlash);
-            DrawFace(_sb, new Vector2(faceX + 330, cy + 210), 0.6f, anger, pressFlash);
-        }
-
-        _sb.End();
-        base.Draw(gameTime);
-    }
-
-    private void DrawWrapped(SpriteBatch sb, List<string> lines, Vector2 centerTop, float size,
-                             Color color, float jitter, float rotBase)
-    {
-        // per-line jitter values (rolled once per frame in Draw)
-        ReadOnlySpan<float> jxs = [_jx1, _jx2, _jx3];
-        ReadOnlySpan<float> jys = [_jy1, _jy2, _jy3];
-        ReadOnlySpan<float> jrs = [_jr1, _jr2, _jr3];
-
-        float lineH = size * 1.4f;
-        float y = centerTop.Y - (lines.Count - 1) * lineH / 2f;
-        for (int i = 0; i < lines.Count; i++)
-        {
-            int k = Math.Min(i, 2);
-            float jx = jxs[k] * jitter;
-            float jy = jys[k] * jitter;
-            float rot = jrs[k] * rotBase;
-            _text.DrawCentered(sb, lines[i], new Vector2(centerTop.X + jx, y + jy), size, color, rot);
-            y += lineH;
-        }
-    }
-
-    private void DrawFace(SpriteBatch sb, Vector2 pos, float scale, float anger, float pressFlash)
-    {
-        float s = 90 * scale;
-        Color skin = Color.Lerp(new Color(255, 214, 165), new Color(220, 40, 40), anger);
-        Color feature = Color.Black;
-
-        // head circle
-        DrawCircleFilled(sb, pos, s, skin);
-
-        // eyebrows slant inward when angry
-        float browAngle = MathHelper.Lerp(-0.15f, 0.6f, anger); // radians tilt
-        float browY = pos.Y - s * 0.35f;
-        float browLen = s * 0.42f;
-        DrawThickLine(sb, new Vector2(pos.X - s * 0.55f, browY), browLen, browAngle, s * 0.12f, feature);
-        DrawThickLine(sb, new Vector2(pos.X + s * 0.15f, browY), browLen, -browAngle, s * 0.12f, feature);
-
-        // eyes: shrink with anger
-        float eyeR = MathHelper.Lerp(s * 0.18f, s * 0.08f, anger);
-        DrawCircleFilled(sb, new Vector2(pos.X - s * 0.35f, pos.Y - s * 0.05f), eyeR, feature);
-        DrawCircleFilled(sb, new Vector2(pos.X + s * 0.35f, pos.Y - s * 0.05f), eyeR, feature);
-
-        // mouth: smile -> flat line -> screaming open oval
-        if (anger < 0.35f)
-        {
-            // gentle smile: three segments
-            DrawThickLine(sb, new Vector2(pos.X - s * 0.4f, pos.Y + s * 0.38f), s * 0.28f, 0.35f, s * 0.09f, feature);
-            DrawThickLine(sb, new Vector2(pos.X - s * 0.14f, pos.Y + s * 0.47f), s * 0.28f, 0f, s * 0.09f, feature);
-            DrawThickLine(sb, new Vector2(pos.X + s * 0.12f, pos.Y + s * 0.38f), s * 0.28f, -0.35f, s * 0.09f, feature);
-        }
-        else if (anger < 0.5f)
-        {
-            DrawThickLine(sb, new Vector2(pos.X - s * 0.4f, pos.Y + s * 0.45f), s * 0.8f,
-                          0f, s * 0.1f, feature);
-        }
-        else
-        {
-            // scream mouth
-            float openness = MathHelper.Lerp(0.2f, 0.6f, (anger - 0.5f) * 2f) * (1f + pressFlash * 0.5f);
-            DrawEllipseFilled(sb, new Vector2(pos.X, pos.Y + s * 0.5f), s * 0.35f, s * openness * 0.5f, feature);
-        }
-
-        // steam puffs at high anger
-        if (anger > 0.6f)
-        {
-            float puff = (float)(Math.Sin(_gameTime * 10) * 0.5 + 0.5);
-            DrawCircleFilled(sb, new Vector2(pos.X - s * 0.9f, pos.Y - s * (1.1f + puff * 0.2f)), s * 0.15f,
-                             Color.White * (0.3f + puff * 0.4f));
-            DrawCircleFilled(sb, new Vector2(pos.X + s * 0.9f, pos.Y - s * (1.1f + (1 - puff) * 0.2f)), s * 0.15f,
-                             Color.White * (0.3f + (1 - puff) * 0.4f));
-        }
-    }
-
-    // --- primitive drawing helpers using the white pixel texture ---
-
-    private void DrawRect(SpriteBatch sb, Rectangle r, Color c)
-    {
-        sb.Draw(_pixel, r, c);
-    }
-
-    private void DrawCircleFilled(SpriteBatch sb, Vector2 center, float radius, Color c)
-    {
-        // approximate with many thin vertical strips
-        int steps = Math.Max(8, (int)(radius / 2f));
-        for (int i = 0; i <= steps; i++)
-        {
-            float dx = -radius + 2f * radius * i / steps;
-            float h = (float)Math.Sqrt(Math.Max(0f, radius * radius - dx * dx));
-            sb.Draw(_pixel, new Rectangle((int)(center.X + dx), (int)(center.Y - h), 2, (int)(h * 2)), c);
-        }
-    }
-
-    private void DrawEllipseFilled(SpriteBatch sb, Vector2 center, float rx, float ry, Color c)
-    {
-        int steps = Math.Max(8, (int)(rx / 2f));
-        for (int i = 0; i <= steps; i++)
-        {
-            float dx = -rx + 2f * rx * i / steps;
-            float h = (float)Math.Sqrt(Math.Max(0f, 1 - (dx * dx) / (rx * rx))) * ry;
-            sb.Draw(_pixel, new Rectangle((int)(center.X + dx), (int)(center.Y - h), 2, (int)(h * 2)), c);
-        }
-    }
-
-    private void DrawThickLine(SpriteBatch sb, Vector2 start, float length, float angleRad, float thickness, Color c)
-    {
-        // Draws a rotated bar. Origin is centered on the thickness axis so the
-        // line grows from `start` along `angleRad`.
-        sb.Draw(_pixel,
-                position: start,
-                sourceRectangle: _pixel.Bounds,
-                color: c,
-                rotation: angleRad,
-                origin: new Vector2(0f, 0.5f), // middle of thickness
-                scale: new Vector2(length, thickness),
-                effects: SpriteEffects.None,
-                layerDepth: 0f);
+        // Note: the framework's own drawable-component loop is intentionally
+        // skipped here — every visual is painted inside the single batch above.
+        // (Their Draw overrides are no-ops / not driven by base.Draw.)
     }
 }

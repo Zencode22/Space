@@ -110,9 +110,160 @@ public class Game1 : Game
         if (!Directory.Exists(contentDir))
             contentDir = Content.RootDirectory; // fallback: relative to CWD
 
-        Text = new SpriteText(GraphicsDevice, contentDir);
+        _text = new SpriteText(GraphicsDevice, contentDir);
 
-        base.LoadContent();
+        _pixel = new Texture2D(GraphicsDevice, 1, 1);
+        _pixel.SetData([Color.White]);
+
+        BuildAudio();
+        _hum?.Play();
+    }
+
+    private void BuildAudio()
+    {
+        // Five "boop" tones that get progressively lower & nastier.
+        var freqs = new (float f, float dur, float vol)[]
+        {
+            (440f, 0.12f, 0.35f),
+            (330f, 0.16f, 0.45f),
+            (247f, 0.22f, 0.6f),
+            (185f, 0.30f, 0.8f),
+            (138f, 0.45f, 1.0f),
+        };
+        for (int i = 0; i < freqs.Length; i++)
+        {
+            var sfx = GenerateTone(freqs[i].f, freqs[i].dur, freqs[i].vol, wave: i >= 3 ? Wave.Square : Wave.Sine);
+            var inst = sfx.CreateInstance();
+            _boops[i] = inst;
+        }
+
+        _scream = GenerateScream().CreateInstance();
+        _hum = GenerateHum().CreateInstance();
+        if (_hum != null) _hum.IsLooped = true;
+    }
+
+    private enum Wave { Sine, Square }
+
+    private static SoundEffect GenerateTone(float hz, float durationSec, float volume, Wave wave)
+    {
+        int sampleRate = 44100;
+        int samples = (int)(sampleRate * durationSec);
+        var data = new float[samples];
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (float)i / sampleRate;
+            float raw = wave == Wave.Sine
+                ? MathF.Sin(2f * MathF.PI * hz * t)
+                : (MathF.Sign(MathF.Sin(2f * MathF.PI * hz * t)));
+            // simple ADSR-ish envelope
+            float env = MathF.Min(1f, i / (sampleRate * 0.01f));
+            env *= MathF.Max(0f, 1f - (i / (float)samples));
+            data[i] = raw * env * volume;
+        }
+        return ToSoundEffect(data, sampleRate);
+    }
+
+    private static SoundEffect GenerateScream()
+    {
+        int sampleRate = 44100;
+        float dur = 0.9f;
+        int samples = (int)(sampleRate * dur);
+        var data = new float[samples];
+        float startHz = 900f, endHz = 180f;
+        for (int i = 0; i < samples; i++)
+        {
+            float p = i / (float)samples;
+            float hz = startHz + (endHz - startHz) * p;
+            float vibrato = 1f + 0.15f * MathF.Sin(2f * MathF.PI * 9f * (i / (float)sampleRate));
+            float saw = 2f * (hz * (i / (float)sampleRate) % 1f) - 1f;
+            float noise = ((float)(_rngGlobal.NextDouble() * 2 - 1)) * 0.4f;
+            float env = MathF.Min(1f, i / (sampleRate * 0.02f));
+            env *= MathF.Max(0f, 1f - p);
+            data[i] = (saw * vibrato + noise) * env * 0.9f;
+        }
+        return ToSoundEffect(data, sampleRate);
+    }
+
+    private static SoundEffect GenerateHum()
+    {
+        int sampleRate = 44100;
+        float dur = 2f;
+        int samples = (int)(sampleRate * dur);
+        var data = new float[samples];
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (float)i / sampleRate;
+            float v = MathF.Sin(2f * MathF.PI * 55f * t) * 0.5f
+                    + MathF.Sin(2f * MathF.PI * 58f * t) * 0.3f;
+            data[i] = v * 0.5f;
+        }
+        return ToSoundEffect(data, sampleRate);
+    }
+
+    private static readonly Random _rngGlobal = new(42);
+
+    private static SoundEffect ToSoundEffect(float[] data, int sampleRate)
+    {
+        var pcm = new byte[data.Length * 2];
+        for (int i = 0; i < data.Length; i++)
+        {
+            short s = (short)(Math.Clamp(data[i], -1f, 1f) * short.MaxValue);
+            pcm[i * 2] = (byte)(s & 0xFF);
+            pcm[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+        }
+        return new SoundEffect(pcm, sampleRate, AudioChannels.Mono);
+    }
+
+    protected override void Update(GameTime gameTime)
+    {
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _gameTime += dt;
+
+        var keys = Keyboard.GetState();
+        bool spaceNow = keys.IsKeyDown(Keys.Space);
+        bool spaceWas = _prevKeys.IsKeyDown(Keys.Space);
+
+        if (spaceNow && !spaceWas)
+        {
+            OnSpacePressed();
+        }
+
+        // hum swells with anger
+        if (_hum != null)
+        {
+            float target = AngerLevel >= 3 ? 0.05f + AngerLevel * 0.03f : 0f;
+            _hum.Volume = MathHelper.Lerp(_hum.Volume, target, dt * 2f);
+        }
+
+        _prevKeys = keys;
+        base.Update(gameTime);
+    }
+
+    private int AngerLevel => Math.Min(_pressCount, Messages.Length - 1);
+
+    private void OnSpacePressed()
+    {
+        _pressCount++;
+        _lastPressAt = _gameTime;
+
+        if (_pressCount <= Messages.Length - 1)
+            _currentMessage = Messages[_pressCount];
+        else
+            _currentMessage = "DO NOT PRESS THE SPACEBAR!!! (we mean it this time)";
+
+        // sound escalation
+        int tier = Math.Min(_pressCount - 1, _boops.Length - 1);
+        if (tier >= 0 && _boops[tier] != null)
+        {
+            _boops[tier].Stop();
+            _boops[tier].Play();
+        }
+        if (_pressCount >= 4 && _scream != null)
+        {
+            _scream.Stop();
+            _scream.Volume = Math.Min(1f, 0.3f + _pressCount * 0.05f);
+            _scream.Play();
+        }
     }
 
     protected override void Draw(GameTime gameTime)
